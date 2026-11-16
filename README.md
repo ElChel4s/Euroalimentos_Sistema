@@ -1,3 +1,13 @@
+# EUROALIMENTOS SRL — Sistema POS, Preventa y Control de Planta
+
+## Regla de Contrato de Base de Datos (Obligatoria)
+
+> **Única Fuente de Verdad:** [`supabase/SCHEMA_REFERENCE.sql`](./supabase/SCHEMA_REFERENCE.sql) es el contrato oficial de base de datos del proyecto (3FN + Herencia CTI).
+>
+> Antes de escribir o modificar cualquier consulta a Supabase (`.select()`, `.insert()`, `.update()`, `.eq()`, `.order()`, `.rpc()`) o interfaz TypeScript en `src/types/database.types.ts`, **consulta obligatoriamente `supabase/SCHEMA_REFERENCE.sql`**. Está prohibido inventar o asumir nombres de columnas.
+>
+> En relaciones de `pedidos` hacia `usuarios` (donde existen dos llaves extranjeras: `id_vendedor` e `id_despachador`), especifica siempre el hint explícito de PostgREST (`vendedor:usuarios!pedidos_id_vendedor_fkey(...)` y `despachador:usuarios!pedidos_id_despachador_fkey(...)`).
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

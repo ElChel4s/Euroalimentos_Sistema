@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/server';
 import type {
   EstadoPedidoEnum,
   FormatoProductoEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
 } from '@/types/database.types';
 
 interface ZonaRelationRaw {
@@ -30,6 +32,8 @@ interface ProductoRelationRaw {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida?: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos?: number;
 }
 
 interface DetallePedidoRowRaw {
@@ -45,7 +49,10 @@ interface DetallePedidoRowRaw {
 interface PedidoRowRaw {
   id_pedido: number;
   nro_nota_venta: number | null;
+  nro_documento_sac: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta: TipoVenta;
+  plazo_dias: number;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -91,7 +98,10 @@ async function MisPedidosContent() {
       `
       id_pedido,
       nro_nota_venta,
+      nro_documento_sac,
       estado,
+      tipo_venta,
+      plazo_dias,
       es_pedido_cortesia_pura,
       observaciones,
       fecha_preventa,
@@ -116,7 +126,9 @@ async function MisPedidosContent() {
           id_producto,
           codigo_sku,
           nombre_producto,
-          formato
+          formato,
+          unidad_medida,
+          peso_unidad_kilos
         )
       )
     `
@@ -163,6 +175,8 @@ async function MisPedidosContent() {
               codigo_sku: prodRel.codigo_sku,
               nombre_producto: prodRel.nombre_producto,
               formato: prodRel.formato,
+              unidad_medida: prodRel.unidad_medida ?? 'KILO',
+              peso_unidad_kilos: Number(prodRel.peso_unidad_kilos ?? 1),
             }
           : null,
       };
@@ -174,7 +188,13 @@ async function MisPedidosContent() {
         row.nro_nota_venta !== null && row.nro_nota_venta !== undefined
           ? String(row.nro_nota_venta)
           : null,
+      nro_documento_sac:
+        row.nro_documento_sac !== null && row.nro_documento_sac !== undefined
+          ? Number(row.nro_documento_sac)
+          : null,
       estado: row.estado,
+      tipo_venta: row.tipo_venta === 'CREDITO' ? 'CREDITO' : 'CONTADO',
+      plazo_dias: Number(row.plazo_dias ?? 0),
       es_pedido_cortesia_pura: Boolean(row.es_pedido_cortesia_pura),
       observaciones: row.observaciones,
       fecha_preventa: row.fecha_preventa,

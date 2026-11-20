@@ -13,6 +13,8 @@ import { createClient } from '@/lib/supabase/server';
 import type {
   EstadoPedidoEnum,
   FormatoProductoEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
 } from '@/types/database.types';
 
 interface ZonaRelRaw {
@@ -37,6 +39,8 @@ interface ProductoRelRaw {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida?: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos?: number;
 }
 
 interface DetallePedidoRowRaw {
@@ -61,7 +65,10 @@ interface AnulacionRowRaw {
 interface PedidoAdminRowRaw {
   id_pedido: number;
   nro_nota_venta: number | null;
+  nro_documento_sac: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta: TipoVenta | null;
+  plazo_dias: number | null;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -101,7 +108,10 @@ async function AdminHistorialContent() {
       `
       id_pedido,
       nro_nota_venta,
+      nro_documento_sac,
       estado,
+      tipo_venta,
+      plazo_dias,
       es_pedido_cortesia_pura,
       observaciones,
       fecha_preventa,
@@ -135,7 +145,9 @@ async function AdminHistorialContent() {
           id_producto,
           codigo_sku,
           nombre_producto,
-          formato
+          formato,
+          unidad_medida,
+          peso_unidad_kilos
         )
       ),
       anulaciones_pedido (
@@ -231,6 +243,8 @@ async function AdminHistorialContent() {
             codigo_sku: prodRel?.codigo_sku ?? 'SIN-SKU',
             nombre_producto: prodRel?.nombre_producto ?? 'Producto sin nombre',
             formato: prodRel?.formato ?? 'GRANEL',
+            unidad_medida: prodRel?.unidad_medida ?? 'KILO',
+            peso_unidad_kilos: Number(prodRel?.peso_unidad_kilos ?? 1),
           },
         };
       })
@@ -239,7 +253,13 @@ async function AdminHistorialContent() {
     return {
       id_pedido: row.id_pedido,
       nro_nota_venta: row.nro_nota_venta,
+      nro_documento_sac:
+        row.nro_documento_sac !== null && row.nro_documento_sac !== undefined
+          ? Number(row.nro_documento_sac)
+          : null,
       estado: row.estado,
+      tipo_venta: row.tipo_venta === 'CREDITO' ? 'CREDITO' : 'CONTADO',
+      plazo_dias: Number(row.plazo_dias ?? 0),
       es_pedido_cortesia_pura: Boolean(row.es_pedido_cortesia_pura),
       observaciones: row.observaciones,
       fecha_preventa: row.fecha_preventa,

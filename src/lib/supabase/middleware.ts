@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import {
   getRoleHomeRoute,
   isRouteAllowedForRole,
@@ -110,7 +111,36 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  const rol = extractRolFromMetadata(user.app_metadata, user.user_metadata);
+  let rol = extractRolFromMetadata(user.app_metadata, user.user_metadata);
+
+  if (!rol && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const adminClient = createSupabaseAdminClient();
+      const { data: userRow } = await adminClient
+        .from('usuarios')
+        .select('rol, activo')
+        .eq('auth_id', user.id)
+        .maybeSingle<{ rol: RolUsuarioEnum; activo: boolean }>();
+
+      if (userRow?.activo && VALID_ROLES.has(userRow.rol)) {
+        rol = userRow.rol;
+      } else if (user.email) {
+        const usernameFromEmail = user.email.split('@')[0]?.trim().toLowerCase();
+        if (usernameFromEmail) {
+          const { data: byUsername } = await adminClient
+            .from('usuarios')
+            .select('rol, activo')
+            .ilike('username', usernameFromEmail)
+            .maybeSingle<{ rol: RolUsuarioEnum; activo: boolean }>();
+          if (byUsername?.activo && VALID_ROLES.has(byUsername.rol)) {
+            rol = byUsername.rol;
+          }
+        }
+      }
+    } catch {
+      // Si el runtime no tiene acceso administrativo, delega la validación al layout servidor
+    }
+  }
 
   if (rol) {
     const homeRoute = getRoleHomeRoute(rol);

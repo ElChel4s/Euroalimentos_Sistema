@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  Banknote,
   Calendar,
   Check,
   CheckCircle2,
@@ -16,6 +17,7 @@ import {
   Clock,
   Copy,
   CopyPlus,
+  CreditCard,
   FileText,
   History,
   MapPin,
@@ -33,6 +35,8 @@ import {
 import type {
   EstadoPedidoEnum,
   FormatoProductoEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
 } from '@/types/database.types';
 
 export interface DetallePedidoVendedorItem {
@@ -47,13 +51,18 @@ export interface DetallePedidoVendedorItem {
     codigo_sku: string;
     nombre_producto: string;
     formato: FormatoProductoEnum;
+    unidad_medida?: UnidadMedidaEnum | (string & {});
+    peso_unidad_kilos?: number;
   } | null;
 }
 
 export interface PedidoVendedorItem {
   id_pedido: number;
   nro_nota_venta: string | null;
+  nro_documento_sac?: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta?: TipoVenta;
+  plazo_dias?: number;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -214,6 +223,23 @@ function formatKg(kg: number, decimals = 2): string {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+}
+
+function getUnidadesInfo(
+  item: DetallePedidoVendedorItem,
+  kilos: number
+): { esUnidad: boolean; unidadesLabel: string | null } {
+  const esUnidad =
+    String(item.productos?.unidad_medida ?? 'KILO').toUpperCase() === 'UNIDAD';
+  const pesoUnidad = Number(item.productos?.peso_unidad_kilos ?? 1);
+  if (!esUnidad || !Number.isFinite(pesoUnidad) || pesoUnidad <= 0) {
+    return { esUnidad: false, unidadesLabel: null };
+  }
+  const unidades = Number((kilos / pesoUnidad).toFixed(2));
+  const unidadesStr = Number.isInteger(unidades)
+    ? String(unidades)
+    : unidades.toFixed(1);
+  return { esUnidad: true, unidadesLabel: `${unidadesStr} unid.` };
 }
 
 function formatHora(isoDate: string): string {
@@ -415,9 +441,14 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
         .toLowerCase()
         .includes(termino);
       const coincideZona = pedido.cliente.zona.toLowerCase().includes(termino);
-      const coincidePedido = String(pedido.id_pedido).includes(termino);
+      const coincidePedido =
+        String(pedido.id_pedido).includes(termino) ||
+        `#ped-${String(pedido.id_pedido).padStart(3, '0')}`.includes(termino);
       const coincideNota = pedido.nro_nota_venta
         ? pedido.nro_nota_venta.toLowerCase().includes(termino)
+        : false;
+      const coincideDocSac = pedido.nro_documento_sac
+        ? String(pedido.nro_documento_sac).includes(termino)
         : false;
 
       return (
@@ -426,7 +457,8 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
           coincideSac ||
           coincideZona ||
           coincidePedido ||
-          coincideNota)
+          coincideNota ||
+          coincideDocSac)
       );
     });
   }, [pedidosDeLaJornada, filtroEstado, busqueda]);
@@ -445,10 +477,16 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
       .map((item) => {
         const nombreProd =
           item.productos?.nombre_producto ?? 'Producto sin nombre';
-        const peso =
+        const kgRef =
+          pedido.estado === 'DESPACHADO' && item.kilos_reales !== null
+            ? item.kilos_reales
+            : item.kilos_estimados;
+        const { unidadesLabel } = getUnidadesInfo(item, kgRef);
+        const pesoBase =
           pedido.estado === 'DESPACHADO' && item.kilos_reales !== null
             ? `${formatKg(item.kilos_reales, 3)} kg`
             : `${formatKg(item.kilos_estimados, 2)} kg est.`;
+        const peso = unidadesLabel ? `${unidadesLabel} · ${pesoBase}` : pesoBase;
         const tag = item.es_cortesia
           ? ' [Cortesía (0.00 Bs)]'
           : ` - Bs. ${formatBs(item.subtotal_bs)}`;
@@ -456,14 +494,21 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
       })
       .join('\n');
 
+    const notaTexto =
+      pedido.estado === 'DESPACHADO' &&
+      (pedido.nro_documento_sac || pedido.nro_nota_venta)
+        ? `Nota N° ${pedido.nro_documento_sac ?? pedido.nro_nota_venta}`
+        : `Preventa #PED-${String(pedido.id_pedido).padStart(3, '0')}`;
+
+    const pagoTexto =
+      pedido.tipo_venta === 'CREDITO'
+        ? `CRÉDITO (${pedido.plazo_dias ?? 0}d)`
+        : 'CONTADO';
+
     return [
-      `*EUROALIMENTOS SRL* — ${
-        pedido.estado === 'DESPACHADO' && pedido.nro_nota_venta
-          ? `Nota #${pedido.nro_nota_venta}`
-          : `Preventa #${pedido.id_pedido}`
-      }`,
+      `*EUROALIMENTOS SRL* — ${notaTexto}`,
       `Cliente: ${pedido.cliente.nombre_comercial} (${pedido.cliente.codigo_cliente_sac})`,
-      `Fecha: ${pedido.fecha_jornada} | Estado: ${pedido.estado}`,
+      `Fecha: ${pedido.fecha_jornada} | Pago: ${pagoTexto} | Estado: ${pedido.estado}`,
       `-------------------------`,
       lineas,
       `-------------------------`,
@@ -1013,19 +1058,41 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
                   aria-expanded={estaExpandido}
                   className="touch-manipulation w-full p-4 text-left transition-colors hover:bg-slate-50/60"
                 >
-                  {/* Fila 1: ID + Nota de venta + Hora + Estado */}
+                  {/* Fila 1: ID + Nota SAC + Condición de Pago + Hora + Estado */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-black tracking-wide text-white">
-                        #{pedido.id_pedido}
+                        #PED-{String(pedido.id_pedido).padStart(3, '0')}
                       </span>
 
-                      {pedido.nro_nota_venta && (
+                      {(pedido.nro_documento_sac || pedido.nro_nota_venta) && (
                         <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 font-mono text-xs font-extrabold text-emerald-900">
                           <FileText className="h-3.5 w-3.5 text-emerald-700" />
-                          Nota #{pedido.nro_nota_venta}
+                          N° {pedido.nro_documento_sac ?? pedido.nro_nota_venta}
                         </span>
                       )}
+
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-mono text-[11px] font-black uppercase ${
+                          pedido.tipo_venta === 'CREDITO'
+                            ? 'border-sky-300 bg-sky-50 text-sky-900'
+                            : 'border-slate-200 bg-slate-100 text-slate-800'
+                        }`}
+                      >
+                        {pedido.tipo_venta === 'CREDITO' ? (
+                          <>
+                            <CreditCard className="h-3 w-3 text-sky-700" />
+                            <span>
+                              CRÉDITO • {pedido.plazo_dias ?? 0}d
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Banknote className="h-3 w-3 text-slate-600" />
+                            <span>CONTADO</span>
+                          </>
+                        )}
+                      </span>
 
                       <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-slate-500">
                         <Clock className="h-3.5 w-3.5" />
@@ -1233,13 +1300,29 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
                             <span className="text-slate-600">
                               Estimado:{' '}
                               <strong className="text-slate-900">
-                                {formatKg(item.kilos_estimados, 2)} kg
+                                {(() => {
+                                  const u = getUnidadesInfo(
+                                    item,
+                                    item.kilos_estimados
+                                  );
+                                  return u.unidadesLabel
+                                    ? `${u.unidadesLabel} • ${formatKg(item.kilos_estimados, 3)} kg`
+                                    : `${formatKg(item.kilos_estimados, 2)} kg`;
+                                })()}
                               </strong>
                             </span>
 
                             {item.kilos_reales !== null ? (
                               <span className="rounded bg-emerald-100 px-2 py-0.5 font-extrabold text-emerald-900">
-                                Balanza: {formatKg(item.kilos_reales, 3)} kg
+                                {(() => {
+                                  const u = getUnidadesInfo(
+                                    item,
+                                    item.kilos_reales
+                                  );
+                                  return u.unidadesLabel
+                                    ? `Balanza: ${u.unidadesLabel} • ${formatKg(item.kilos_reales, 3)} kg`
+                                    : `Balanza: ${formatKg(item.kilos_reales, 3)} kg`;
+                                })()}
                               </span>
                             ) : (
                               <span className="text-[11px] font-semibold text-amber-700">
@@ -1349,14 +1432,20 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-xs font-black uppercase tracking-wider text-[#FFCD00]">
                             {pedidoDetalleActivo.estado === 'DESPACHADO' &&
-                            pedidoDetalleActivo.nro_nota_venta
-                              ? `NOTA DE VENTA #${pedidoDetalleActivo.nro_nota_venta}`
-                              : `PREVENTA #${pedidoDetalleActivo.id_pedido}`}
+                            (pedidoDetalleActivo.nro_documento_sac ||
+                              pedidoDetalleActivo.nro_nota_venta)
+                              ? `NOTA N° ${pedidoDetalleActivo.nro_documento_sac ?? pedidoDetalleActivo.nro_nota_venta}`
+                              : `PREVENTA #PED-${String(pedidoDetalleActivo.id_pedido).padStart(3, '0')}`}
                           </span>
                           <span
                             className={`rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-black uppercase ${badgeEstadoDetalle}`}
                           >
                             {pedidoDetalleActivo.estado}
+                          </span>
+                          <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase text-white">
+                            {pedidoDetalleActivo.tipo_venta === 'CREDITO'
+                              ? `CRÉDITO • ${pedidoDetalleActivo.plazo_dias ?? 0}d`
+                              : 'CONTADO'}
                           </span>
                         </div>
                         <h2
@@ -1590,7 +1679,15 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
                                 <span className="text-slate-600">
                                   Solicitado:{' '}
                                   <strong className="text-slate-900">
-                                    {formatKg(item.kilos_estimados, 2)} kg
+                                    {(() => {
+                                      const u = getUnidadesInfo(
+                                        item,
+                                        item.kilos_estimados
+                                      );
+                                      return u.unidadesLabel
+                                        ? `${u.unidadesLabel} • ${formatKg(item.kilos_estimados, 3)} kg`
+                                        : `${formatKg(item.kilos_estimados, 2)} kg`;
+                                    })()}
                                   </strong>
                                 </span>
 
@@ -1598,8 +1695,15 @@ export const MisPedidosList: React.FC<MisPedidosListProps> = ({
                                   <>
                                     <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
                                     <span className="rounded-md bg-emerald-100 px-2 py-0.5 font-extrabold text-emerald-900">
-                                      Balanza: {formatKg(item.kilos_reales, 3)}{' '}
-                                      kg
+                                      {(() => {
+                                        const u = getUnidadesInfo(
+                                          item,
+                                          item.kilos_reales
+                                        );
+                                        return u.unidadesLabel
+                                          ? `Balanza: ${u.unidadesLabel} • ${formatKg(item.kilos_reales, 3)} kg`
+                                          : `Balanza: ${formatKg(item.kilos_reales, 3)} kg`;
+                                      })()}
                                     </span>
                                   </>
                                 )}

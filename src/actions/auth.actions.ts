@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { getUsuarioConPerfilActivo } from '@/lib/auth/session';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getRoleHomeRoute } from '@/lib/utils/roles';
 import type { RolUsuarioEnum } from '@/types/database.types';
@@ -15,6 +15,7 @@ export type AuthActionState = {
 interface UsuarioAuthRow {
   id_usuario: number;
   auth_id: string | null;
+  username: string;
   rol: RolUsuarioEnum;
   activo: boolean;
 }
@@ -34,9 +35,10 @@ export async function loginAction(
     return { error: 'Ingrese su usuario/correo y contraseña.' };
   }
 
-  const email = identifier.includes('@')
-    ? identifier.trim().toLowerCase()
-    : `${identifier.trim().toLowerCase()}@euroalimentos.com`;
+  const normalizedIdentifier = identifier.trim().toLowerCase();
+  const email = normalizedIdentifier.includes('@')
+    ? normalizedIdentifier
+    : `${normalizedIdentifier}@euroalimentos.com`;
 
   const supabase = await createClient();
 
@@ -57,11 +59,16 @@ export async function loginAction(
   }
 
   const authUserId = data.user.id;
-  const username = email.split('@')[0];
+  const usernameNormalizado = email.split('@')[0];
 
-  const { data: usuarioByAuth, error: authLookupError } = await supabase
+  // Lectura administrativa en servidor (bypassea RLS en `public.usuarios` tras login)
+  const dbLookupClient = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createSupabaseAdminClient()
+    : supabase;
+
+  const { data: usuarioByAuth, error: authLookupError } = await dbLookupClient
     .from('usuarios')
-    .select('id_usuario, auth_id, rol, activo')
+    .select('id_usuario, auth_id, username, rol, activo')
     .eq('auth_id', authUserId)
     .maybeSingle<UsuarioAuthRow>();
 
@@ -78,23 +85,24 @@ export async function loginAction(
 
   let usuario = usuarioByAuth;
 
-  // Autovinculación inicial por username (insensible a mayúsculas) si no se encontró por auth_id
+  // Autovinculación / actualización de `auth_id` por `username` si no coincidía aún
   if (!usuario) {
-    const { data: usuarioEncontrado, error: usernameError } = await supabase
-      .from('usuarios')
-      .select('id_usuario, auth_id, rol, activo')
-      .ilike('username', username)
-      .maybeSingle<UsuarioAuthRow>();
+    const { data: usuarioEncontrado, error: usernameError } =
+      await dbLookupClient
+        .from('usuarios')
+        .select('id_usuario, auth_id, username, rol, activo')
+        .ilike('username', usernameNormalizado)
+        .maybeSingle<UsuarioAuthRow>();
 
     if (usernameError) {
       console.error('[AUTH DB ERROR - username]:', usernameError.message, {
         code: usernameError.code,
-        username,
+        username: usernameNormalizado,
       });
     }
 
     if (!usernameError && usuarioEncontrado) {
-      const { error: linkError } = await supabase
+      const { error: linkError } = await dbLookupClient
         .from('usuarios')
         .update({ auth_id: authUserId })
         .eq('id_usuario', usuarioEncontrado.id_usuario);
@@ -106,7 +114,6 @@ export async function loginAction(
         });
       }
 
-      // Continúa el flujo normal sin rechazar al usuario encontrado por username
       usuario = { ...usuarioEncontrado, auth_id: authUserId };
     }
   }
@@ -115,15 +122,15 @@ export async function loginAction(
     console.error('[AUTH PROFILE MISSING]:', {
       email,
       authUserId,
-      username,
+      username: usernameNormalizado,
     });
     await supabase.auth.signOut();
     return {
-      error: `El usuario '${username}' existe en Auth pero no está registrado en la tabla public.usuarios.`,
+      error: `El usuario '${usernameNormalizado}' existe en Auth pero no está registrado en la tabla public.usuarios.`,
     };
   }
 
-  if (usuario.activo === false) {
+  if (usuario.activo !== true) {
     await supabase.auth.signOut();
     return { error: 'Su cuenta está desactivada. Contacte a Gerencia.' };
   }
@@ -200,7 +207,7 @@ export async function crearUsuarioEmpleadoAction(
   const email = `${normalizedUsername}@euroalimentos.com`;
 
   try {
-    const adminClient = createAdminClient();
+    const adminClient = createSupabaseAdminClient();
     const { data, error } = await adminClient.auth.admin.createUser({
       email,
       password: input.password,
@@ -281,7 +288,7 @@ export async function verificarUsuarioLoginAction(
 
   // Si está configurada la Service Role Key, se puede consultar directamente
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const adminClient = createAdminClient();
+    const adminClient = createSupabaseAdminClient();
     const { data, error } = await adminClient
       .from('usuarios')
       .select('username, nombre_completo, rol, activo, requiere_cambio_clave')
@@ -421,7 +428,7 @@ export async function completarCambioClaveYLoginAction(
   let idUsuario = 0;
 
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const adminClient = createAdminClient();
+    const adminClient = createSupabaseAdminClient();
     const { data: userRow, error: lookupErr } = await adminClient
       .from('usuarios')
       .select('id_usuario, auth_id, username, rol, activo, requiere_cambio_clave')

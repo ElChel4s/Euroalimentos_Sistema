@@ -5,11 +5,14 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowUpDown,
+  Banknote,
   Check,
   ChevronDown,
   ChevronUp,
   Clock,
+  CreditCard,
   FileText,
+  Gift,
   Layers,
   Loader2,
   MapPin,
@@ -670,6 +673,33 @@ export const BandejaDespachoClient: React.FC<BandejaDespachoClientProps> = ({
                       {pedido.cliente.codigo_cliente_sac}
                     </span>
 
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 font-mono text-[11px] font-black uppercase ${
+                        pedido.tipo_venta === 'CREDITO'
+                          ? 'bg-sky-100 text-sky-900'
+                          : 'bg-slate-200 text-slate-800'
+                      }`}
+                    >
+                      {pedido.tipo_venta === 'CREDITO' ? (
+                        <>
+                          <CreditCard className="h-3 w-3" />
+                          <span>CRÉDITO • {pedido.plazo_dias}d</span>
+                        </>
+                      ) : (
+                        <>
+                          <Banknote className="h-3 w-3" />
+                          <span>CONTADO</span>
+                        </>
+                      )}
+                    </span>
+
+                    {pedido.cliente.regla_cortesia_habitual && (
+                      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border border-amber-400 bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-black uppercase text-amber-950">
+                        <Gift className="h-3 w-3 text-[#C8102E]" />
+                        <span>CORTESÍA HABITUAL</span>
+                      </span>
+                    )}
+
                     {pedido.es_pedido_cortesia_pura && (
                       <span className="shrink-0 whitespace-nowrap rounded bg-purple-700 px-2 py-0.5 font-mono text-[10px] font-black uppercase text-white">
                         CORTESÍA PURA
@@ -701,11 +731,20 @@ export const BandejaDespachoClient: React.FC<BandejaDespachoClientProps> = ({
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#C8102E]" />
                         <span>
                           {pedido.cliente.zona.nombre_zona}
-                          {pedido.cliente.zona.ciudad
-                            ? ` · ${pedido.cliente.zona.ciudad}`
-                            : ''}
+                          {pedido.cliente.localidad &&
+                          pedido.cliente.localidad.toLowerCase() !==
+                            pedido.cliente.zona.nombre_zona.toLowerCase()
+                            ? ` · ${pedido.cliente.localidad}`
+                            : pedido.cliente.zona.ciudad
+                              ? ` · ${pedido.cliente.zona.ciudad}`
+                              : ''}
                         </span>
                       </span>
+                      {pedido.cliente.direccion && (
+                        <span className="pl-5 text-[11px] font-semibold text-slate-500">
+                          Dir.: {pedido.cliente.direccion}
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1.5 text-slate-600">
                         <User className="h-3.5 w-3.5 shrink-0 text-slate-500" />
                         <span>
@@ -716,6 +755,13 @@ export const BandejaDespachoClient: React.FC<BandejaDespachoClientProps> = ({
                         </span>
                       </span>
                     </div>
+
+                    {pedido.cliente.regla_cortesia_habitual && (
+                      <div className="flex items-start gap-2 rounded-xl border-l-4 border-[#C8102E] bg-amber-50 p-2.5 text-xs font-extrabold text-amber-950">
+                        <Gift className="mt-0.5 h-4 w-4 shrink-0 text-[#C8102E]" />
+                        <span>{pedido.cliente.regla_cortesia_habitual}</span>
+                      </div>
+                    )}
 
                     {pedido.observaciones && (
                       <div className="flex items-start gap-2 rounded-xl border-l-4 border-[#FFCD00] bg-amber-50 p-2.5 text-xs font-bold text-slate-950">
@@ -788,7 +834,10 @@ export const BandejaDespachoClient: React.FC<BandejaDespachoClientProps> = ({
                           </div>
 
                           <span className="shrink-0 whitespace-nowrap rounded-lg bg-white px-2.5 py-1 font-mono text-sm font-black tabular-nums text-slate-950 ring-1 ring-slate-300">
-                            {formatKilos(det.kilos_estimados)}
+                            {String(det.producto.unidad_medida).toUpperCase() ===
+                              'UNIDAD' && det.producto.peso_unidad_kilos > 0
+                              ? `${Math.round(det.kilos_estimados / det.producto.peso_unidad_kilos)} u. · ${formatKilos(det.kilos_estimados)}`
+                              : formatKilos(det.kilos_estimados)}
                           </span>
                         </button>
                       );

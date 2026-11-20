@@ -119,7 +119,10 @@ async function HistorialDespachosContent() {
       `
       id_pedido,
       nro_nota_venta,
+      nro_documento_sac,
       estado,
+      tipo_venta,
+      plazo_dias,
       es_pedido_cortesia_pura,
       observaciones,
       fecha_preventa,
@@ -163,7 +166,9 @@ async function HistorialDespachosContent() {
           id_producto,
           codigo_sku,
           nombre_producto,
-          formato
+          formato,
+          unidad_medida,
+          peso_unidad_kilos
         )
       )
     `
@@ -212,6 +217,13 @@ async function HistorialDespachosContent() {
           codigo_sku: prodRel?.codigo_sku ?? 'SIN-SKU',
           nombre_producto: prodRel?.nombre_producto ?? 'Producto sin nombre',
           formato: prodRel?.formato ?? 'GRANEL',
+          unidad_medida:
+            (prodRel as unknown as { unidad_medida?: string })?.unidad_medida ??
+            'KILO',
+          peso_unidad_kilos: Number(
+            (prodRel as unknown as { peso_unidad_kilos?: number })
+              ?.peso_unidad_kilos ?? 1
+          ),
           kilos_estimados: Number(det.kilos_estimados ?? 0),
           kilos_reales:
             det.kilos_reales !== null && det.kilos_reales !== undefined
@@ -259,7 +271,18 @@ async function HistorialDespachosContent() {
     return {
       id_pedido: row.id_pedido,
       nro_nota_venta: row.nro_nota_venta,
+      nro_documento_sac:
+        (row as unknown as { nro_documento_sac?: number | null })
+          .nro_documento_sac ?? null,
       estado: row.estado,
+      tipo_venta:
+        (row as unknown as { tipo_venta?: 'CONTADO' | 'CREDITO' }).tipo_venta ===
+        'CREDITO'
+          ? 'CREDITO'
+          : 'CONTADO',
+      plazo_dias: Number(
+        (row as unknown as { plazo_dias?: number }).plazo_dias ?? 0
+      ),
       es_pedido_cortesia_pura: Boolean(row.es_pedido_cortesia_pura),
       fecha_preventa: row.fecha_preventa,
       fecha_despacho: row.fecha_despacho,

@@ -20,6 +20,12 @@ export type FormatoProductoEnum = 'GRANEL' | 'VACIO' | 'UNIDAD';
 
 export type EstadoPedidoEnum = 'PENDIENTE' | 'DESPACHADO' | 'ANULADO';
 
+export type TipoVenta = 'CONTADO' | 'CREDITO';
+
+export type TipoVentaEnum = TipoVenta;
+
+export type UnidadMedidaEnum = 'KILO' | 'UNIDAD';
+
 export type TipoMovimientoEnum =
   | 'INGRESO_PRODUCCION'
   | 'SALIDA_TRANSFORMACION'
@@ -45,6 +51,7 @@ export interface Usuario {
   creado_en: string;
   auth_id: string | null;
   requiere_cambio_clave?: boolean;
+  codigo_empleado_sac: string | null;
 }
 
 /** Proyección pública/sesión de Usuario sin `password_hash` */
@@ -109,9 +116,17 @@ export interface Cliente {
   id_cliente: number;
   codigo_cliente_sac: string;
   nombre_comercial: string;
+  razon_social: string | null;
   nit_ci: string | null;
   telefono: string | null;
+  direccion: string | null;
   id_zona: number;
+  localidad: string | null;
+  forma_pago_habitual: TipoVenta;
+  plazo_dias: number;
+  limite_credito_bs: number;
+  regla_cortesia_habitual: string | null;
+  observaciones: string | null;
   activo: boolean;
   creado_en: string;
 }
@@ -134,10 +149,14 @@ export interface Producto {
   id_categoria: number;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos: number;
   precio_kilo_bs: number;
+  costo_unitario_bs: number;
   stock_fisico_kilos: number;
   stock_comprometido_kilos: number;
   readonly stock_disponible_kilos: number | null;
+  stock_minimo_alerta: number;
   activo: boolean;
 }
 
@@ -158,10 +177,13 @@ export type ProductoUpdate = Partial<
 export interface Pedido {
   id_pedido: number;
   nro_nota_venta: number | null;
+  nro_documento_sac: number | null;
   id_cliente: number;
   id_vendedor: number;
   id_despachador: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta: TipoVenta;
+  plazo_dias: number;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -303,5 +325,43 @@ export interface VwReporteVentasDiarioSac {
   total_kilos_vendidos: number;
   total_kilos_cortesia: number;
   monto_total_bs: number;
+  estado: EstadoPedidoEnum;
+}
+
+/** `public.vw_ventas_desglosadas_sac` */
+export interface VwVentasDesglosadasSac {
+  id_pedido: number;
+  id_detalle: number;
+  nro_nota: number | null;
+  nro_documento_sac: number | null;
+  fecha_venta: string;
+  fecha_despacho: string | null;
+  tipo_venta: TipoVenta;
+  plazo_dias: number;
+  id_cliente: number;
+  codigo_cliente: string;
+  cliente: string;
+  razon_social: string | null;
+  nit_ci: string | null;
+  id_zona: number;
+  zona_mercado: string;
+  localidad: string | null;
+  id_vendedor: number;
+  codigo_empleado_sac: string | null;
+  vendedor: string;
+  id_producto: number;
+  codigo_sku: string;
+  nombre_producto: string;
+  categoria: string;
+  formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos: number;
+  es_cortesia: boolean;
+  kilos_estimados: number;
+  cantidad_final_kilos: number;
+  cantidad_facturada_unidad_o_kg: number;
+  precio_unitario_congelado: number;
+  costo_unitario_bs: number;
+  subtotal_bs: number;
   estado: EstadoPedidoEnum;
 }

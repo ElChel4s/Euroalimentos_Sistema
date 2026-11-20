@@ -18,10 +18,16 @@ export interface ConfirmarDespachoInput {
   id_pedido: number;
   detalles_pesados: ConfirmarDespachoDetalleInput[];
   cortesias: ConfirmarDespachoCortesiaInput[];
+  nro_documento_sac?: number | null;
 }
 
 export type ConfirmarDespachoResult =
-  | { ok: true; nro_nota_venta: number; id_pedido: number }
+  | {
+      ok: true;
+      nro_nota_venta: number;
+      nro_documento_sac: number | null;
+      id_pedido: number;
+    }
   | { ok: false; error: string };
 
 function redondearKilos3Decimales(valor: number): number {
@@ -133,7 +139,41 @@ export async function confirmarDespachoAction(
     });
   }
 
+  let nroDocumentoSac: number | null = null;
+  if (
+    input.nro_documento_sac !== undefined &&
+    input.nro_documento_sac !== null
+  ) {
+    if (
+      !Number.isInteger(input.nro_documento_sac) ||
+      input.nro_documento_sac <= 0
+    ) {
+      return {
+        ok: false,
+        error:
+          'El número de documento SAC debe ser un entero positivo mayor a 0.',
+      };
+    }
+    nroDocumentoSac = input.nro_documento_sac;
+  }
+
   const supabase = await createClient();
+
+  if (nroDocumentoSac !== null) {
+    const { data: docExistente } = await supabase
+      .from('pedidos')
+      .select('id_pedido')
+      .eq('nro_documento_sac', nroDocumentoSac)
+      .neq('id_pedido', input.id_pedido)
+      .maybeSingle();
+
+    if (docExistente) {
+      return {
+        ok: false,
+        error: `El N° Documento SAC ${nroDocumentoSac} ya está asignado a otro pedido (#${docExistente.id_pedido}).`,
+      };
+    }
+  }
 
   const { data, error } = await supabase.rpc('rpc_confirmar_despacho', {
     p_id_pedido: input.id_pedido,
@@ -156,6 +196,21 @@ export async function confirmarDespachoAction(
     };
   }
 
+  if (nroDocumentoSac !== null) {
+    const { error: sacErr } = await supabase
+      .from('pedidos')
+      .update({ nro_documento_sac: nroDocumentoSac })
+      .eq('id_pedido', input.id_pedido);
+
+    if (sacErr) {
+      console.error('[DESPACHO NRO_DOC_SAC UPDATE ERROR]:', sacErr.message);
+      return {
+        ok: false,
+        error: `El despacho se confirmó, pero no se pudo guardar el N° Documento SAC ${nroDocumentoSac}: ${sacErr.message}`,
+      };
+    }
+  }
+
   const rawData = data as unknown;
   const nroNotaVenta =
     typeof rawData === 'number'
@@ -172,10 +227,13 @@ export async function confirmarDespachoAction(
   revalidatePath('/vendedor/mis-pedidos');
   revalidatePath('/produccion/lotes');
   revalidatePath('/admin/historial');
+  revalidatePath('/admin/reportes');
+  revalidatePath('/admin/kardex');
 
   return {
     ok: true,
     nro_nota_venta: Number.isFinite(nroNotaVenta) ? nroNotaVenta : 0,
+    nro_documento_sac: nroDocumentoSac,
     id_pedido: input.id_pedido,
   };
 }

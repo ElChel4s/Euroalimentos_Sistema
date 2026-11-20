@@ -2,6 +2,8 @@ import type {
   EstadoPedidoEnum,
   FormatoProductoEnum,
   RolUsuarioEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
   UsuarioConPerfil,
 } from '@/types/database.types';
 
@@ -25,8 +27,15 @@ export interface ClienteDespachoItem {
   id_cliente: number;
   codigo_cliente_sac: string;
   nombre_comercial: string;
+  razon_social: string | null;
   nit_ci: string | null;
   telefono: string | null;
+  direccion: string | null;
+  localidad: string | null;
+  forma_pago_habitual: TipoVenta;
+  plazo_dias: number;
+  regla_cortesia_habitual: string | null;
+  observaciones: string | null;
   zona: ZonaDespachoItem;
 }
 
@@ -41,6 +50,8 @@ export interface ProductoDespachoItem {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos: number;
   stock_fisico_kilos: number;
   stock_comprometido_kilos: number;
 }
@@ -50,6 +61,8 @@ export interface ProductoCatalogoPesajeItem {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos: number;
   precio_kilo_bs: number;
   stock_fisico_kilos: number;
 }
@@ -68,7 +81,10 @@ export interface DetallePedidoDespachoItem {
 export interface PedidoDespachoItem {
   id_pedido: number;
   nro_nota_venta: number | null;
+  nro_documento_sac: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta: TipoVenta;
+  plazo_dias: number;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -80,7 +96,10 @@ export interface PedidoDespachoItem {
 export const PEDIDO_DESPACHO_SELECT = `
   id_pedido,
   nro_nota_venta,
+  nro_documento_sac,
   estado,
+  tipo_venta,
+  plazo_dias,
   es_pedido_cortesia_pura,
   observaciones,
   fecha_preventa,
@@ -88,8 +107,15 @@ export const PEDIDO_DESPACHO_SELECT = `
     id_cliente,
     codigo_cliente_sac,
     nombre_comercial,
+    razon_social,
     nit_ci,
     telefono,
+    direccion,
+    localidad,
+    forma_pago_habitual,
+    plazo_dias,
+    regla_cortesia_habitual,
+    observaciones,
     zonas_mercado (
       id_zona,
       nombre_zona,
@@ -116,6 +142,8 @@ export const PEDIDO_DESPACHO_SELECT = `
       codigo_sku,
       nombre_producto,
       formato,
+      unidad_medida,
+      peso_unidad_kilos,
       stock_fisico_kilos,
       stock_comprometido_kilos
     )
@@ -132,8 +160,15 @@ interface ClienteRelationRaw {
   id_cliente: number;
   codigo_cliente_sac: string;
   nombre_comercial: string;
+  razon_social: string | null;
   nit_ci: string | null;
   telefono: string | null;
+  direccion: string | null;
+  localidad: string | null;
+  forma_pago_habitual: TipoVenta;
+  plazo_dias: number;
+  regla_cortesia_habitual: string | null;
+  observaciones: string | null;
   zonas_mercado: ZonaRelationRaw | ZonaRelationRaw[] | null;
 }
 
@@ -152,6 +187,8 @@ interface ProductoRelationRaw {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos: number;
   stock_fisico_kilos: number;
   stock_comprometido_kilos: number;
 }
@@ -170,7 +207,10 @@ interface DetallePedidoRowRaw {
 export interface PedidoDespachoRowRaw {
   id_pedido: number;
   nro_nota_venta: number | null;
+  nro_documento_sac: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta: TipoVenta;
+  plazo_dias: number;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -184,6 +224,8 @@ export interface ProductoCatalogoRowRaw {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos: number;
   precio_kilo_bs: number;
   stock_fisico_kilos: number;
 }
@@ -224,6 +266,8 @@ export function mapPedidoDespachoRow(
           nombre_producto:
             prod?.nombre_producto ?? `Producto #${det.id_producto}`,
           formato: prod?.formato ?? 'GRANEL',
+          unidad_medida: prod?.unidad_medida ?? 'KILO',
+          peso_unidad_kilos: Number(prod?.peso_unidad_kilos ?? 1),
           stock_fisico_kilos: Number(prod?.stock_fisico_kilos ?? 0),
           stock_comprometido_kilos: Number(prod?.stock_comprometido_kilos ?? 0),
         },
@@ -237,7 +281,13 @@ export function mapPedidoDespachoRow(
       row.nro_nota_venta !== null && row.nro_nota_venta !== undefined
         ? Number(row.nro_nota_venta)
         : null,
+    nro_documento_sac:
+      row.nro_documento_sac !== null && row.nro_documento_sac !== undefined
+        ? Number(row.nro_documento_sac)
+        : null,
     estado: row.estado,
+    tipo_venta: row.tipo_venta === 'CREDITO' ? 'CREDITO' : 'CONTADO',
+    plazo_dias: Number(row.plazo_dias ?? 0),
     es_pedido_cortesia_pura: Boolean(row.es_pedido_cortesia_pura),
     observaciones: row.observaciones ?? null,
     fecha_preventa: row.fecha_preventa,
@@ -245,8 +295,16 @@ export function mapPedidoDespachoRow(
       id_cliente: Number(cli?.id_cliente ?? 0),
       codigo_cliente_sac: cli?.codigo_cliente_sac ?? 'SIN-SAC',
       nombre_comercial: cli?.nombre_comercial ?? 'Cliente sin nombre',
+      razon_social: cli?.razon_social ?? null,
       nit_ci: cli?.nit_ci ?? null,
       telefono: cli?.telefono ?? null,
+      direccion: cli?.direccion ?? null,
+      localidad: cli?.localidad ?? null,
+      forma_pago_habitual:
+        cli?.forma_pago_habitual === 'CREDITO' ? 'CREDITO' : 'CONTADO',
+      plazo_dias: Number(cli?.plazo_dias ?? 0),
+      regla_cortesia_habitual: cli?.regla_cortesia_habitual ?? null,
+      observaciones: cli?.observaciones ?? null,
       zona: {
         id_zona: Number(zona?.id_zona ?? 0),
         nombre_zona: zona?.nombre_zona ?? 'Sin zona asignada',
@@ -272,6 +330,8 @@ export function mapProductosCatalogoPesaje(
     codigo_sku: p.codigo_sku,
     nombre_producto: p.nombre_producto,
     formato: p.formato,
+    unidad_medida: p.unidad_medida ?? 'KILO',
+    peso_unidad_kilos: Number(p.peso_unidad_kilos ?? 1),
     precio_kilo_bs: Number(p.precio_kilo_bs ?? 0),
     stock_fisico_kilos: Number(p.stock_fisico_kilos ?? 0),
   }));

@@ -8,7 +8,7 @@ DROP FUNCTION IF EXISTS public.rpc_registrar_lote_produccion(INT, INT, VARCHAR, 
 
 CREATE OR REPLACE FUNCTION public.rpc_registrar_lote_produccion(
   p_id_producto INT,
-  p_id_usuario INT,
+  p_id_usuario_produccion INT,
   p_codigo_lote_interno VARCHAR,
   p_kilos_producidos NUMERIC,
   p_fecha_elaboracion DATE,
@@ -33,7 +33,7 @@ BEGIN
     RAISE EXCEPTION 'Producto inválido para ingreso de lote.';
   END IF;
 
-  IF p_id_usuario IS NULL OR p_id_usuario <= 0 THEN
+  IF p_id_usuario_produccion IS NULL OR p_id_usuario_produccion <= 0 THEN
     RAISE EXCEPTION 'Usuario de producción inválido.';
   END IF;
 
@@ -59,12 +59,12 @@ BEGIN
   SELECT EXISTS (
     SELECT 1
     FROM public.perfil_produccion
-    WHERE id_usuario = p_id_usuario
+    WHERE id_usuario = p_id_usuario_produccion
   )
   INTO v_tiene_perfil_produccion;
 
   IF NOT v_tiene_perfil_produccion THEN
-    RAISE EXCEPTION 'El usuario % no posee un perfil CTI activo en perfil_produccion.', p_id_usuario;
+    RAISE EXCEPTION 'El usuario % no posee un perfil CTI activo en perfil_produccion.', p_id_usuario_produccion;
   END IF;
 
   -- 2. Bloquear fila del producto en cámara (FOR UPDATE)
@@ -99,7 +99,7 @@ BEGIN
   )
   VALUES (
     p_id_producto,
-    p_id_usuario,
+    p_id_usuario_produccion,
     'INGRESO_PRODUCCION',
     v_kilos,
     v_saldo_anterior,
@@ -122,7 +122,7 @@ BEGIN
   )
   VALUES (
     v_id_movimiento,
-    p_id_usuario,
+    p_id_usuario_produccion,
     v_codigo_lote,
     v_kilos,
     p_fecha_elaboracion

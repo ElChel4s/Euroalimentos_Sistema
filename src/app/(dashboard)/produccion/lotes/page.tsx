@@ -9,13 +9,15 @@ import {
 import { ModuleLoadingSkeleton } from '@/components/ui/ModuleLoadingSkeleton';
 import { getUsuarioConPerfilActivo } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import type { FormatoProductoEnum } from '@/types/database.types';
+import type { FormatoProductoEnum, UnidadMedidaEnum } from '@/types/database.types';
 
 interface ProductoQueryRow {
   id_producto: number;
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {}) | null;
+  peso_unidad_kilos: number | null;
   stock_fisico_kilos: number;
   stock_comprometido_kilos: number;
   stock_disponible_kilos: number | null;
@@ -65,7 +67,7 @@ async function ProduccionLotesContent() {
   const { data, error } = await supabase
     .from('productos')
     .select(
-      'id_producto, codigo_sku, nombre_producto, formato, stock_fisico_kilos, stock_comprometido_kilos, stock_disponible_kilos'
+      'id_producto, codigo_sku, nombre_producto, formato, unidad_medida, peso_unidad_kilos, stock_fisico_kilos, stock_comprometido_kilos, stock_disponible_kilos'
     )
     .eq('activo', true)
     .order('stock_disponible_kilos', { ascending: true })
@@ -92,6 +94,8 @@ async function ProduccionLotesContent() {
     codigo_sku: row.codigo_sku,
     nombre_producto: row.nombre_producto,
     formato: row.formato,
+    unidad_medida: row.unidad_medida ?? 'KILO',
+    peso_unidad_kilos: Number(row.peso_unidad_kilos ?? 1),
     stock_fisico_kilos: Number(row.stock_fisico_kilos ?? 0),
     stock_comprometido_kilos: Number(row.stock_comprometido_kilos ?? 0),
     stock_disponible_kilos: Number(

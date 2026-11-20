@@ -33,7 +33,7 @@ async function DespachoContent() {
     supabase
       .from('productos')
       .select(
-        'id_producto, codigo_sku, nombre_producto, formato, precio_kilo_bs, stock_fisico_kilos'
+        'id_producto, codigo_sku, nombre_producto, formato, unidad_medida, peso_unidad_kilos, precio_kilo_bs, stock_fisico_kilos'
       )
       .eq('activo', true)
       .order('nombre_producto', { ascending: true }),

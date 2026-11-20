@@ -12,6 +12,7 @@ CREATE TABLE public.usuarios (
   creado_en timestamp with time zone NOT NULL DEFAULT now(),
   auth_id uuid UNIQUE,
   requiere_cambio_clave boolean NOT NULL DEFAULT false,
+  codigo_empleado_sac character varying UNIQUE,
   CONSTRAINT usuarios_pkey PRIMARY KEY (id_usuario),
   CONSTRAINT usuarios_auth_id_fkey FOREIGN KEY (auth_id) REFERENCES auth.users(id)
 );
@@ -65,6 +66,14 @@ CREATE TABLE public.clientes (
   id_zona integer NOT NULL,
   activo boolean NOT NULL DEFAULT true,
   creado_en timestamp with time zone NOT NULL DEFAULT now(),
+  razon_social character varying,
+  direccion text,
+  localidad character varying,
+  forma_pago_habitual USER-DEFINED NOT NULL DEFAULT 'CONTADO'::tipo_venta_enum,
+  plazo_dias integer NOT NULL DEFAULT 0 CHECK (plazo_dias >= 0),
+  limite_credito_bs numeric NOT NULL DEFAULT 0.00 CHECK (limite_credito_bs >= 0::numeric),
+  regla_cortesia_habitual text,
+  observaciones text,
   CONSTRAINT clientes_pkey PRIMARY KEY (id_cliente),
   CONSTRAINT clientes_id_zona_fkey FOREIGN KEY (id_zona) REFERENCES public.zonas_mercado(id_zona)
 );
@@ -85,6 +94,10 @@ CREATE TABLE public.productos (
   stock_comprometido_kilos numeric NOT NULL DEFAULT 0.000,
   stock_disponible_kilos numeric DEFAULT (stock_fisico_kilos - stock_comprometido_kilos),
   activo boolean NOT NULL DEFAULT true,
+  unidad_medida character varying NOT NULL DEFAULT 'KILO'::character varying,
+  peso_unidad_kilos numeric NOT NULL DEFAULT 1.000 CHECK (peso_unidad_kilos > 0::numeric),
+  costo_unitario_bs numeric NOT NULL DEFAULT 0.00000 CHECK (costo_unitario_bs >= 0::numeric),
+  stock_minimo_alerta numeric NOT NULL DEFAULT 10.000 CHECK (stock_minimo_alerta >= 0::numeric),
   CONSTRAINT productos_pkey PRIMARY KEY (id_producto),
   CONSTRAINT productos_id_categoria_fkey FOREIGN KEY (id_categoria) REFERENCES public.categorias_producto(id_categoria)
 );
@@ -99,6 +112,9 @@ CREATE TABLE public.pedidos (
   observaciones text,
   fecha_preventa timestamp with time zone NOT NULL DEFAULT now(),
   fecha_despacho timestamp with time zone,
+  tipo_venta USER-DEFINED NOT NULL DEFAULT 'CONTADO'::tipo_venta_enum,
+  plazo_dias integer NOT NULL DEFAULT 0 CHECK (plazo_dias >= 0),
+  nro_documento_sac integer UNIQUE,
   CONSTRAINT pedidos_pkey PRIMARY KEY (id_pedido),
   CONSTRAINT pedidos_id_despachador_fkey FOREIGN KEY (id_despachador) REFERENCES public.usuarios(id_usuario),
   CONSTRAINT pedidos_id_cliente_fkey FOREIGN KEY (id_cliente) REFERENCES public.clientes(id_cliente),
@@ -180,3 +196,20 @@ CREATE TABLE public.anulaciones_pedido (
   CONSTRAINT anulaciones_pedido_id_administrador_fkey FOREIGN KEY (id_administrador) REFERENCES public.perfil_administrador(id_usuario),
   CONSTRAINT anulaciones_pedido_id_movimiento_reingreso_fkey FOREIGN KEY (id_movimiento_reingreso) REFERENCES public.movimientos_kardex(id_movimiento)
 );
+
+-- ENUM ADICIONAL:
+-- tipo_venta_enum: 'CONTADO' | 'CREDITO'
+--
+-- VISTAS CONTABLES SAC:
+-- public.vw_reporte_ventas_diario_sac (
+--   nro_nota, fecha_venta, codigo_cliente, cliente, zona_mercado,
+--   vendedor, total_kilos_vendidos, total_kilos_cortesia, monto_total_bs, estado
+-- )
+-- public.vw_ventas_desglosadas_sac (
+--   id_pedido, id_detalle, nro_nota, nro_documento_sac, fecha_venta, fecha_despacho,
+--   tipo_venta, plazo_dias, id_cliente, codigo_cliente, cliente, razon_social, nit_ci,
+--   id_zona, zona_mercado, localidad, id_vendedor, codigo_empleado_sac, vendedor,
+--   id_producto, codigo_sku, nombre_producto, categoria, formato, unidad_medida,
+--   peso_unidad_kilos, es_cortesia, kilos_estimados, cantidad_final_kilos,
+--   cantidad_facturada_unidad_o_kg, precio_unitario_congelado, subtotal_bs, estado
+-- )

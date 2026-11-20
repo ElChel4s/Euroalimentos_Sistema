@@ -10,7 +10,11 @@ import { PreventaMobileForm } from '@/components/forms/PreventaMobileForm';
 import { ModuleLoadingSkeleton } from '@/components/ui/ModuleLoadingSkeleton';
 import { getUsuarioConPerfilActivo } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import type { FormatoProductoEnum } from '@/types/database.types';
+import type {
+  FormatoProductoEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
+} from '@/types/database.types';
 
 interface ZonaRelationRaw {
   id_zona: number;
@@ -21,9 +25,17 @@ interface ClienteRowRaw {
   id_cliente: number;
   codigo_cliente_sac: string;
   nombre_comercial: string;
+  razon_social: string | null;
   id_zona: number;
   nit_ci: string | null;
   telefono: string | null;
+  direccion: string | null;
+  localidad: string | null;
+  forma_pago_habitual: TipoVenta;
+  plazo_dias: number;
+  limite_credito_bs: number;
+  regla_cortesia_habitual: string | null;
+  observaciones: string | null;
   zonas_mercado: ZonaRelationRaw | ZonaRelationRaw[] | null;
 }
 
@@ -37,6 +49,9 @@ interface ProductoRowRaw {
   id_categoria: number;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos: number;
+  stock_minimo_alerta: number;
   precio_kilo_bs: number;
   stock_disponible_kilos: number | null;
   categorias_producto: CategoriaRelationRaw | CategoriaRelationRaw[] | null;
@@ -63,7 +78,7 @@ async function NuevaVentaContent() {
       supabase
         .from('clientes')
         .select(
-          'id_cliente, codigo_cliente_sac, nombre_comercial, id_zona, nit_ci, telefono, zonas_mercado(id_zona, nombre_zona)'
+          'id_cliente, codigo_cliente_sac, nombre_comercial, razon_social, id_zona, nit_ci, telefono, direccion, localidad, forma_pago_habitual, plazo_dias, limite_credito_bs, regla_cortesia_habitual, observaciones, zonas_mercado(id_zona, nombre_zona)'
         )
         .eq('activo', true)
         .order('nombre_comercial', { ascending: true }),
@@ -75,7 +90,7 @@ async function NuevaVentaContent() {
       supabase
         .from('productos')
         .select(
-          'id_producto, codigo_sku, id_categoria, nombre_producto, formato, precio_kilo_bs, stock_disponible_kilos, categorias_producto(nombre_categoria)'
+          'id_producto, codigo_sku, id_categoria, nombre_producto, formato, unidad_medida, peso_unidad_kilos, stock_minimo_alerta, precio_kilo_bs, stock_disponible_kilos, categorias_producto(nombre_categoria)'
         )
         .eq('activo', true)
         .order('nombre_producto', { ascending: true }),
@@ -99,10 +114,18 @@ async function NuevaVentaContent() {
       id_cliente: c.id_cliente,
       codigo_cliente_sac: c.codigo_cliente_sac,
       nombre_comercial: c.nombre_comercial,
+      razon_social: c.razon_social,
       id_zona: c.id_zona,
       zona: zonaRel?.nombre_zona ?? 'Sin zona asignada',
       nit_ci: c.nit_ci,
       telefono: c.telefono,
+      direccion: c.direccion,
+      localidad: c.localidad,
+      forma_pago_habitual: c.forma_pago_habitual ?? 'CONTADO',
+      plazo_dias: Number(c.plazo_dias ?? 0),
+      limite_credito_bs: Number(c.limite_credito_bs ?? 0),
+      regla_cortesia_habitual: c.regla_cortesia_habitual,
+      observaciones: c.observaciones,
       zonas_mercado: zonaRel,
     };
   });
@@ -125,6 +148,9 @@ async function NuevaVentaContent() {
       id_categoria: p.id_categoria,
       nombre_producto: p.nombre_producto,
       formato: p.formato,
+      unidad_medida: p.unidad_medida ?? 'KILO',
+      peso_unidad_kilos: Number(p.peso_unidad_kilos ?? 1),
+      stock_minimo_alerta: Number(p.stock_minimo_alerta ?? 10),
       precio_kilo_bs: Number(p.precio_kilo_bs ?? 0),
       requiere_produccion: Number(p.stock_disponible_kilos ?? 0) <= 0,
       categorias_producto: catRel
@@ -161,6 +187,7 @@ async function NuevaVentaContent() {
       )}
 
       <PreventaMobileForm
+        idVendedor={usuario.id_usuario}
         clientesIniciales={clientesIniciales}
         zonas={zonas}
         productos={productos}

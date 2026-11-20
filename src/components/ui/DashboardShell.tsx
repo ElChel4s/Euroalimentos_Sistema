@@ -480,6 +480,12 @@ const RUTAS_POR_ROL: Record<RolUsuarioEnum, NavItemConfig[]> = {
       icon: FileSpreadsheet,
     },
     {
+      label: 'Kardex e Inventario',
+      shortLabel: 'Kardex',
+      href: '/admin/kardex',
+      icon: ClipboardList,
+    },
+    {
       label: 'Catálogo y Usuarios',
       shortLabel: 'Catálogo',
       href: '/admin/catalogo',
@@ -824,7 +830,9 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
               ? 'grid-cols-1'
               : navItems.length === 2
                 ? 'grid-cols-2'
-                : 'grid-cols-3'
+                : navItems.length === 3
+                  ? 'grid-cols-3'
+                  : 'grid-cols-4'
           }`}
         >
           {navItems.map((item) => {

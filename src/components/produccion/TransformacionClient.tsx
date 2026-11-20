@@ -5,26 +5,26 @@ import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowLeftRight,
-  Check,
   CheckCircle2,
   ChevronDown,
   Clock,
   FileText,
   Info,
+  Package,
   PackageCheck,
   PackageOpen,
   Scale,
-  Search,
   ShieldAlert,
   Sparkles,
   ThermometerSnowflake,
   X,
 } from 'lucide-react';
 import { registrarTransformacionInventarioAction } from '@/actions/produccion.actions';
-import type {
-  PerfilProduccionResumen,
-  ProductoProduccionItem,
-} from '@/components/produccion/IngresoLotesClient';
+import {
+  ProductoProduccionSelectorModal,
+  type ProductoProduccionItem,
+} from '@/components/produccion/ProductoProduccionSelectorModal';
+import type { PerfilProduccionResumen } from '@/components/produccion/IngresoLotesClient';
 
 export interface TransformacionClientProps {
   productosGranel: ProductoProduccionItem[];
@@ -49,182 +49,6 @@ function parseDecimalInput(raw: string): number {
   return Number.isNaN(parsed) || parsed < 0 ? 0 : Number(parsed.toFixed(3));
 }
 
-interface ProductSelectorSheetProps {
-  onClose: () => void;
-  title: string;
-  subtitle: string;
-  accentColor: 'crimson' | 'yellow';
-  productos: ProductoProduccionItem[];
-  selectedId: number;
-  onSelect: (producto: ProductoProduccionItem) => void;
-}
-
-function ProductSelectorSheet({
-  onClose,
-  title,
-  subtitle,
-  accentColor,
-  productos,
-  selectedId,
-  onSelect,
-}: ProductSelectorSheetProps) {
-  const [busqueda, setBusqueda] = useState('');
-
-  const filtrados = useMemo(() => {
-    const q = busqueda.toLowerCase().trim();
-    if (!q) return productos;
-    return productos.filter(
-      (p) =>
-        p.nombre_producto.toLowerCase().includes(q) ||
-        p.codigo_sku.toLowerCase().includes(q)
-    );
-  }, [productos, busqueda]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-xs sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="selector-sheet-title"
-    >
-      <div className="fixed inset-0" onClick={onClose} />
-
-      <div className="relative z-10 flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border-2 border-slate-200 bg-white shadow-2xl sm:rounded-2xl">
-        <div className="flex h-1.5 w-full shrink-0">
-          <div
-            className={`w-2/3 ${
-              accentColor === 'crimson' ? 'bg-[#C8102E]' : 'bg-[#FFCD00]'
-            }`}
-          />
-          <div
-            className={`w-1/3 ${
-              accentColor === 'crimson' ? 'bg-[#FFCD00]' : 'bg-[#C8102E]'
-            }`}
-          />
-        </div>
-
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5">
-          <div className="min-w-0">
-            <h3
-              id="selector-sheet-title"
-              className="text-base font-extrabold tracking-tight text-slate-900"
-            >
-              {title}
-            </h3>
-            <p className="mt-0.5 text-xs text-slate-600">{subtitle}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 active:scale-95"
-            aria-label="Cerrar selector"
-          >
-            <X className="h-5 w-5" strokeWidth={2.2} />
-          </button>
-        </div>
-
-        <div className="border-b border-slate-200 bg-white p-3.5">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3.5 h-5 w-5 -translate-y-1/2 text-slate-400"
-              strokeWidth={2}
-            />
-            <input
-              type="text"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por SKU o nombre de embutido..."
-              className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/70 pr-4 pl-11 text-base text-slate-900 shadow-inner transition focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 space-y-2.5 overflow-y-auto p-3.5">
-          {filtrados.length === 0 ? (
-            <div className="py-10 text-center text-slate-500">
-              <p className="text-sm font-semibold">
-                No se encontraron productos con &ldquo;{busqueda}&rdquo;
-              </p>
-              <p className="mt-1 text-xs">
-                Verifique el código SKU o el formato requerido.
-              </p>
-            </div>
-          ) : (
-            filtrados.map((prod) => {
-              const isSelected = prod.id_producto === selectedId;
-              const enDeficit =
-                prod.formato === 'VACIO' &&
-                Number(prod.stock_disponible_kilos) <= 0;
-              const deficitPreventa = Math.abs(
-                Number(prod.stock_disponible_kilos)
-              );
-
-              return (
-                <button
-                  key={prod.id_producto}
-                  type="button"
-                  onClick={() => {
-                    onSelect(prod);
-                    onClose();
-                  }}
-                  className={`flex min-h-[68px] w-full items-start justify-between gap-3 rounded-xl border-2 p-3.5 text-left transition ${
-                    isSelected
-                      ? 'border-[#C8102E] bg-red-50/40 ring-2 ring-[#FFCD00]/50'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="rounded bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold tracking-wider text-white">
-                        {prod.codigo_sku}
-                      </span>
-                      <span
-                        className={`rounded px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide ${
-                          prod.formato === 'GRANEL'
-                            ? 'bg-red-100 text-[#9E0B22]'
-                            : 'bg-amber-100 text-amber-900'
-                        }`}
-                      >
-                        {prod.formato}
-                      </span>
-                      {enDeficit && (
-                        <span className="rounded bg-rose-600 px-2 py-0.5 font-mono text-[11px] font-extrabold text-white tabular-nums">
-                          {deficitPreventa > 0
-                            ? `Faltan ${formatKg(deficitPreventa)} kg`
-                            : 'Sin stock disp.'}
-                        </span>
-                      )}
-                    </div>
-                    <p className="line-clamp-2 text-sm font-bold leading-snug text-slate-900">
-                      {prod.nombre_producto}
-                    </p>
-                  </div>
-
-                  <div className="flex shrink-0 flex-col items-end justify-between self-stretch text-right">
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        Físico
-                      </span>
-                      <span className="font-mono text-sm font-black text-slate-900 tabular-nums">
-                        {formatKg(Number(prod.stock_fisico_kilos))} kg
-                      </span>
-                    </div>
-                    {isSelected && (
-                      <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#C8102E] text-white">
-                        <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function TransformacionClient({
   productosGranel,
   productosVacio,
@@ -236,6 +60,20 @@ export function TransformacionClient({
     useState<ProductoProduccionItem[]>(productosGranel);
   const [listaVacio, setListaVacio] =
     useState<ProductoProduccionItem[]>(productosVacio);
+  const [prevProductosGranel, setPrevProductosGranel] =
+    useState<ProductoProduccionItem[]>(productosGranel);
+  const [prevProductosVacio, setPrevProductosVacio] =
+    useState<ProductoProduccionItem[]>(productosVacio);
+
+  if (productosGranel !== prevProductosGranel) {
+    setPrevProductosGranel(productosGranel);
+    setListaGranel(productosGranel);
+  }
+
+  if (productosVacio !== prevProductosVacio) {
+    setPrevProductosVacio(productosVacio);
+    setListaVacio(productosVacio);
+  }
 
   const [idOrigen, setIdOrigen] = useState<number>(
     productosGranel[0]?.id_producto ?? 0
@@ -382,10 +220,28 @@ export function TransformacionClient({
       }
 
       const saldoNuevoOrigen = Number(
-        resultado.data.saldo_nuevo_origen.toFixed(3)
+        (
+          resultado.data.saldo_origen_nuevo ??
+          Math.max(0, Number(productoOrigen.stock_fisico_kilos) - kilosOrigen)
+        ).toFixed(3)
       );
       const saldoNuevoDestino = Number(
-        resultado.data.saldo_nuevo_destino.toFixed(3)
+        (
+          resultado.data.saldo_destino_nuevo ??
+          Number(productoDestino.stock_fisico_kilos) + kilosDestino
+        ).toFixed(3)
+      );
+      const saldoDispOrigen = Number(
+        (
+          resultado.data.saldo_disponible_origen ??
+          saldoNuevoOrigen - Number(productoOrigen.stock_comprometido_kilos)
+        ).toFixed(3)
+      );
+      const saldoDispDestino = Number(
+        (
+          resultado.data.saldo_disponible_destino ??
+          saldoNuevoDestino - Number(productoDestino.stock_comprometido_kilos)
+        ).toFixed(3)
       );
       const mermaReal = Number(resultado.data.merma_kilos.toFixed(3));
 
@@ -393,14 +249,10 @@ export function TransformacionClient({
         prev.map((item) =>
           item.id_producto === productoOrigen.id_producto
             ? {
-                ...item,
-                stock_fisico_kilos: saldoNuevoOrigen,
-                stock_disponible_kilos: Number(
-                  (
-                    saldoNuevoOrigen - Number(item.stock_comprometido_kilos)
-                  ).toFixed(3)
-                ),
-              }
+              ...item,
+              stock_fisico_kilos: saldoNuevoOrigen,
+              stock_disponible_kilos: saldoDispOrigen,
+            }
             : item
         )
       );
@@ -409,14 +261,10 @@ export function TransformacionClient({
         prev.map((item) =>
           item.id_producto === productoDestino.id_producto
             ? {
-                ...item,
-                stock_fisico_kilos: saldoNuevoDestino,
-                stock_disponible_kilos: Number(
-                  (
-                    saldoNuevoDestino - Number(item.stock_comprometido_kilos)
-                  ).toFixed(3)
-                ),
-              }
+              ...item,
+              stock_fisico_kilos: saldoNuevoDestino,
+              stock_disponible_kilos: saldoDispDestino,
+            }
             : item
         )
       );
@@ -473,11 +321,10 @@ export function TransformacionClient({
             </span>
 
             <span
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${
-                perfilProduccion.responsable_camara_frio
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                  : 'border-slate-200 bg-slate-100 text-slate-700'
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${perfilProduccion.responsable_camara_frio
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : 'border-slate-200 bg-slate-100 text-slate-700'
+                }`}
             >
               <ThermometerSnowflake
                 className="h-3.5 w-3.5 text-emerald-700"
@@ -506,11 +353,10 @@ export function TransformacionClient({
       {feedbackBanner && (
         <div
           role="status"
-          className={`flex items-start justify-between gap-3 rounded-2xl border-2 p-4 shadow-sm ${
-            feedbackBanner.tipo === 'exito'
-              ? 'border-emerald-600 bg-emerald-50 text-emerald-950'
-              : 'border-[#C8102E] bg-red-50 text-red-950'
-          }`}
+          className={`flex items-start justify-between gap-3 rounded-2xl border-2 p-4 shadow-sm ${feedbackBanner.tipo === 'exito'
+            ? 'border-emerald-600 bg-emerald-50 text-emerald-950'
+            : 'border-[#C8102E] bg-red-50 text-red-950'
+            }`}
         >
           <div className="flex min-w-0 items-start gap-3">
             {feedbackBanner.tipo === 'exito' ? (
@@ -583,15 +429,26 @@ export function TransformacionClient({
               >
                 {productoOrigen ? (
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-xs font-extrabold text-white">
                         {productoOrigen.codigo_sku}
                       </span>
                       <span className="text-xs font-bold text-[#9E0B22]">
                         GRANEL
                       </span>
+                      {String(productoOrigen.unidad_medida).toUpperCase() ===
+                        'UNIDAD' && (
+                          <span className="inline-flex items-center gap-1 rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-purple-900">
+                            <Package className="h-3 w-3" />
+                            UNIDAD (
+                            {Math.round(
+                              (productoOrigen.peso_unidad_kilos || 0.5) * 1000
+                            )}
+                            g)
+                          </span>
+                        )}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-slate-900">
+                    <p className="mt-1 break-words text-sm font-bold leading-snug text-slate-900">
                       {productoOrigen.nombre_producto}
                     </p>
                   </div>
@@ -659,11 +516,10 @@ export function TransformacionClient({
                     setKilosOrigenRaw(e.target.value);
                     setFeedbackBanner(null);
                   }}
-                  className={`min-h-[56px] w-full rounded-xl border-2 pr-14 pl-4 font-mono text-2xl font-black tabular-nums transition focus:outline-none ${
-                    auditoria.excedeStockOrigen
-                      ? 'border-red-600 bg-red-50/60 text-red-900 focus:ring-4 focus:ring-red-500/25'
-                      : 'border-slate-200 bg-slate-50/60 text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30'
-                  }`}
+                  className={`min-h-[56px] w-full rounded-xl border-2 pr-14 pl-4 font-mono text-2xl font-black tabular-nums transition focus:outline-none ${auditoria.excedeStockOrigen
+                    ? 'border-red-600 bg-red-50/60 text-red-900 focus:ring-4 focus:ring-red-500/25'
+                    : 'border-slate-200 bg-slate-50/60 text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30'
+                    }`}
                 />
                 <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 font-mono text-sm font-extrabold text-slate-500">
                   KG
@@ -743,10 +599,21 @@ export function TransformacionClient({
                         {productoDestino.codigo_sku}
                       </span>
                       <span className="text-xs font-extrabold text-amber-800">
-                        AL VACÍO
+                        VACIO
                       </span>
+                      {String(productoDestino.unidad_medida).toUpperCase() ===
+                        'UNIDAD' && (
+                          <span className="inline-flex items-center gap-1 rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-purple-900">
+                            <Package className="h-3 w-3" />
+                            UNIDAD (
+                            {Math.round(
+                              (productoDestino.peso_unidad_kilos || 0.5) * 1000
+                            )}
+                            g)
+                          </span>
+                        )}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-slate-900">
+                    <p className="mt-1 break-words text-sm font-bold leading-snug text-slate-900">
                       {productoDestino.nombre_producto}
                     </p>
                   </div>
@@ -828,16 +695,34 @@ export function TransformacionClient({
                     setKilosDestinoRaw(e.target.value);
                     setFeedbackBanner(null);
                   }}
-                  className={`min-h-[56px] w-full rounded-xl border-2 pr-14 pl-4 font-mono text-2xl font-black tabular-nums transition focus:outline-none ${
-                    auditoria.destinoSuperaOrigen
-                      ? 'border-red-600 bg-red-50/60 text-red-900 focus:ring-4 focus:ring-red-500/25'
-                      : 'border-slate-200 bg-slate-50/60 text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30'
-                  }`}
+                  className={`min-h-[56px] w-full rounded-xl border-2 pr-14 pl-4 font-mono text-2xl font-black tabular-nums transition focus:outline-none ${auditoria.destinoSuperaOrigen
+                    ? 'border-red-600 bg-red-50/60 text-red-900 focus:ring-4 focus:ring-red-500/25'
+                    : 'border-slate-200 bg-slate-50/60 text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30'
+                    }`}
                 />
                 <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 font-mono text-sm font-extrabold text-slate-500">
                   KG
                 </span>
               </div>
+
+              {productoDestino &&
+                String(productoDestino.unidad_medida).toUpperCase() ===
+                'UNIDAD' &&
+                kilosDestino > 0 &&
+                productoDestino.peso_unidad_kilos > 0 && (
+                  <div className="flex items-center justify-between rounded-xl border border-purple-200 bg-purple-50/70 px-3 py-2 font-mono text-xs">
+                    <span className="font-bold text-purple-900">
+                      Paquetes empacados (
+                      {Math.round(productoDestino.peso_unidad_kilos * 1000)}g):
+                    </span>
+                    <span className="font-black tabular-nums text-slate-900">
+                      {(
+                        kilosDestino / productoDestino.peso_unidad_kilos
+                      ).toFixed(1)}{' '}
+                      unid.
+                    </span>
+                  </div>
+                )}
 
               <div className="pt-1">
                 <button
@@ -945,21 +830,19 @@ export function TransformacionClient({
               </div>
 
               <div
-                className={`flex flex-col justify-between rounded-xl border-2 p-3.5 transition ${
-                  auditoria.excedeToleranciaMerma
-                    ? 'border-amber-500 bg-amber-50'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
+                className={`flex flex-col justify-between rounded-xl border-2 p-3.5 transition ${auditoria.excedeToleranciaMerma
+                  ? 'border-amber-500 bg-amber-50'
+                  : 'border-slate-200 bg-slate-50'
+                  }`}
               >
                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                   4. % Merma
                 </span>
                 <p
-                  className={`mt-1 font-mono text-lg font-black sm:text-xl ${
-                    auditoria.excedeToleranciaMerma
-                      ? 'text-amber-800'
-                      : 'text-slate-900'
-                  }`}
+                  className={`mt-1 font-mono text-lg font-black sm:text-xl ${auditoria.excedeToleranciaMerma
+                    ? 'text-amber-800'
+                    : 'text-slate-900'
+                    }`}
                 >
                   {formatPct(auditoria.porcentajeMerma)}%
                 </p>
@@ -1056,7 +939,7 @@ export function TransformacionClient({
       </form>
 
       {sheetOrigenOpen && (
-        <ProductSelectorSheet
+        <ProductoProduccionSelectorModal
           onClose={() => setSheetOrigenOpen(false)}
           title="Seleccionar Producto Origen (GRANEL)"
           subtitle="Productos disponibles en formato granel en cámara de frío"
@@ -1071,7 +954,7 @@ export function TransformacionClient({
       )}
 
       {sheetDestinoOpen && (
-        <ProductSelectorSheet
+        <ProductoProduccionSelectorModal
           onClose={() => setSheetDestinoOpen(false)}
           title="Seleccionar Producto Destino (AL VACÍO)"
           subtitle="Seleccione el SKU empacado al vacío que ingresará a stock"

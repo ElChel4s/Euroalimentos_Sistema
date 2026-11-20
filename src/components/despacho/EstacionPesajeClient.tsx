@@ -6,23 +6,29 @@ import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowLeft,
+  Banknote,
+  Check,
   CheckCheck,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Clock,
   Copy,
+  CreditCard,
   Eye,
   FileText,
   Gift,
   Info,
   Layers,
   MapPin,
+  Package,
   PackageCheck,
   Plus,
   Printer,
   Receipt,
   RotateCcw,
   Scale,
+  Search,
   ShieldCheck,
   Tag,
   Trash2,
@@ -30,11 +36,7 @@ import {
   X,
 } from 'lucide-react';
 import { confirmarDespachoAction } from '@/actions/despacho.actions';
-import {
-  CharcuteriePatternBg,
-  EuroalimentosEmblem,
-  PlantCardHeaderStrip,
-} from '@/components/forms/PreventaBrandDecor';
+import { PlantCardHeaderStrip } from '@/components/forms/PreventaBrandDecor';
 import {
   TicketTermicoEpson,
   type AnchoPapelTermico,
@@ -121,13 +123,11 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
 }) => {
   const router = useRouter();
 
-  // Productos elegibles para cortesías (GRANEL o VACIO según RF-08, con fallback a catálogo completo)
-  const productosCortesiaElegibles = useMemo(() => {
-    const granelOVacio = productosCatalogo.filter(
-      (p) => p.formato === 'GRANEL' || p.formato === 'VACIO'
-    );
-    return granelOVacio.length > 0 ? granelOVacio : productosCatalogo;
-  }, [productosCatalogo]);
+  // Productos elegibles para cortesías: catálogo activo completo (los 19 productos reales)
+  const productosCortesiaElegibles = useMemo(
+    () => productosCatalogo,
+    [productosCatalogo]
+  );
 
   // Estado de pesos reales por id_detalle (vacío al iniciar para forzar pesaje en gancho)
   const [pesosReales, setPesosReales] = useState<Record<number, string>>(() => {
@@ -143,6 +143,18 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
 
   // Estado de líneas de cortesía / degustación (RF-08 / CU-D03)
   const [cortesias, setCortesias] = useState<LineaCortesia[]>([]);
+  const [cortesiaModalLineId, setCortesiaModalLineId] = useState<string | null>(
+    null
+  );
+  const [busquedaCortesiaProd, setBusquedaCortesiaProd] = useState<string>('');
+  const [formatoCortesiaFiltro, setFormatoCortesiaFiltro] = useState<
+    'TODOS' | 'GRANEL' | 'VACIO'
+  >('TODOS');
+
+  // N° Documento SAC opcional ingresado manualmente tras facturación en SAC
+  const [nroDocSac, setNroDocSac] = useState<string>(() =>
+    pedido.nro_documento_sac ? String(pedido.nro_documento_sac) : ''
+  );
 
   // Estados de UI, vista previa y confirmación atómica
   const [enviando, setEnviando] = useState(false);
@@ -156,6 +168,31 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
 
   // Refs para navegación secuencial con Enter
   const inputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+  const productosCortesiaFiltrados = useMemo(() => {
+    const q = busquedaCortesiaProd.trim().toLowerCase();
+    return productosCortesiaElegibles.filter((prod) => {
+      if (
+        formatoCortesiaFiltro !== 'TODOS' &&
+        prod.formato !== formatoCortesiaFiltro
+      ) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        prod.codigo_sku.toLowerCase().includes(q) ||
+        prod.nombre_producto.toLowerCase().includes(q)
+      );
+    });
+  }, [productosCortesiaElegibles, busquedaCortesiaProd, formatoCortesiaFiltro]);
+
+  const lineaCortesiaActivaModal = useMemo(
+    () =>
+      cortesiaModalLineId
+        ? (cortesias.find((c) => c.id_temp === cortesiaModalLineId) ?? null)
+        : null,
+    [cortesias, cortesiaModalLineId]
+  );
 
   const handleKeyDownEnter = (
     e: React.KeyboardEvent<HTMLInputElement>,
@@ -215,9 +252,17 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
     setPesosReales(nuevoMapa);
   };
 
-  const handleAgregarCortesia = (kilosIniciales = '') => {
+  const handleAgregarCortesia = (
+    kilosIniciales = '',
+    idProductoPreferido?: number
+  ) => {
     if (!perfilDespachador.autorizado_cortesias) return;
-    const productoDefault = productosCortesiaElegibles[0];
+    const productoDefault =
+      (idProductoPreferido
+        ? productosCortesiaElegibles.find(
+            (p) => p.id_producto === idProductoPreferido
+          )
+        : undefined) ?? productosCortesiaElegibles[0];
     if (!productoDefault) return;
 
     setErrorBanner(null);
@@ -227,6 +272,12 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
       kilos_reales: kilosIniciales,
     };
     setCortesias((prev) => [...prev, nuevaLinea]);
+  };
+
+  const abrirModalCortesiaProducto = (idTemp: string) => {
+    setBusquedaCortesiaProd('');
+    setFormatoCortesiaFiltro('TODOS');
+    setCortesiaModalLineId(idTemp);
   };
 
   const handleActualizarCortesiaProducto = (
@@ -391,6 +442,13 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
     productosCortesiaElegibles,
   ]);
 
+  const nroDocSacNumerico = useMemo(() => {
+    const limpio = nroDocSac.trim();
+    if (!limpio) return null;
+    const parsed = Number.parseInt(limpio, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [nroDocSac]);
+
   const pedidoVistaPrevia = useMemo<PedidoTicketTermico>(() => {
     const detallesFacturados = calculos.detallesProcesados.map((det) => ({
       id_detalle: det.id_detalle,
@@ -398,6 +456,8 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
       codigo_sku: det.producto.codigo_sku,
       nombre_producto: det.producto.nombre_producto,
       formato: det.producto.formato,
+      unidad_medida: det.producto.unidad_medida,
+      peso_unidad_kilos: det.producto.peso_unidad_kilos,
       kilos_estimados: det.kilos_estimados,
       kilos_reales: det.kilosEfectivos,
       precio_unitario_congelado: det.precio_unitario_congelado,
@@ -413,6 +473,8 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
         codigo_sku: cort.producto!.codigo_sku,
         nombre_producto: cort.producto!.nombre_producto,
         formato: cort.producto!.formato,
+        unidad_medida: cort.producto!.unidad_medida,
+        peso_unidad_kilos: cort.producto!.peso_unidad_kilos,
         kilos_estimados: 0,
         kilos_reales: cort.kilosEfectivos,
         precio_unitario_congelado: 0,
@@ -423,7 +485,10 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
     return {
       id_pedido: pedido.id_pedido,
       nro_nota_venta: pedido.nro_nota_venta,
+      nro_documento_sac: nroDocSacNumerico,
       estado: pedido.estado,
+      tipo_venta: pedido.tipo_venta,
+      plazo_dias: pedido.plazo_dias,
       es_pedido_cortesia_pura: pedido.es_pedido_cortesia_pura,
       fecha_preventa: pedido.fecha_preventa,
       fecha_despacho: null,
@@ -448,7 +513,7 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
       },
       detalles: [...detallesFacturados, ...detallesCortesia],
     };
-  }, [calculos, pedido, perfilDespachador]);
+  }, [calculos, nroDocSacNumerico, pedido, perfilDespachador]);
 
   const ejecutarConfirmacionFinal = async () => {
     if (!calculos.formularioListo || enviando) return;
@@ -458,6 +523,7 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
     try {
       const resultado = await confirmarDespachoAction({
         id_pedido: pedido.id_pedido,
+        nro_documento_sac: nroDocSacNumerico,
         detalles_pesados: calculos.detallesProcesados.map((d) => ({
           id_detalle: d.id_detalle,
           kilos_reales: d.kilosEfectivos,
@@ -490,73 +556,68 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
   return (
     <div className="relative mx-auto w-full max-w-[1440px] min-w-0 space-y-5 pb-24 lg:pb-8 text-slate-900 antialiased selection:bg-[#FFCD00] selection:text-slate-950">
       {/* =====================================================================
-          1. BARRA SUPERIOR DE ESTACIÓN INDUSTRIAL
+          1. BARRA DE CONTEXTO OPERATIVO DE ESTACIÓN (SIN HEADER ROJO DUPLICADO)
          ===================================================================== */}
-      <header className="relative overflow-hidden rounded-2xl border-2 border-[#9E0B22] border-b-4 border-b-[#FFCD00] bg-gradient-to-r from-[#85081C] via-[#C8102E] to-[#9E0B22] text-white shadow-lg">
-        <CharcuteriePatternBg variant="card" idSuffix="pesaje-header" />
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
-          {/* Izquierda: Volver + Identidad */}
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Link
-              href="/despacho"
-              className="touch-manipulation flex min-h-[48px] shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-black/25 px-3.5 py-2 text-sm font-bold text-white transition hover:bg-black/40"
-            >
-              <ArrowLeft className="h-5 w-5 text-[#FFCD00]" strokeWidth={2.2} />
-              <span className="hidden sm:inline">← Volver a Bandeja</span>
-            </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs sm:px-5">
+        {/* Izquierda: Identidad Operativa */}
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Link
+            href="/despacho"
+            className="touch-manipulation flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+          >
+            <ArrowLeft className="h-4 w-4 text-[#C8102E]" strokeWidth={2.2} />
+            <span className="hidden sm:inline">Bandeja</span>
+          </Link>
 
-            <EuroalimentosEmblem size="sm" />
+          <div className="min-w-0 flex-1">
+            <span className="block truncate font-mono text-[11px] font-extrabold uppercase tracking-wider text-[#C8102E]">
+              Cámara y Balanza
+            </span>
+            <h1 className="break-words text-base font-black tracking-tight text-slate-900 sm:text-lg">
+              Estación de Pesaje en Gancho y Cortesías
+            </h1>
+          </div>
+        </div>
 
-            <div className="min-w-0 flex-1">
-              <span className="block truncate text-[11px] font-extrabold uppercase tracking-widest text-[#FFCD00]">
-                EUROALIMENTOS SRL • CÁMARA Y BALANZA
+        {/* Derecha: Telemetría Balanza / Impresora */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          <div className="hidden items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 xl:flex">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               </span>
-              <h1 className="break-words text-base font-black tracking-tight text-white sm:text-xl">
-                Estación de Pesaje en Gancho y Cortesías
-              </h1>
+              <Scale className="h-4 w-4 text-[#C8102E]" strokeWidth={2.2} />
+              <span className="font-mono text-xs font-bold tracking-tight text-slate-800">
+                {perfilDespachador.identificador_balanza}
+              </span>
+            </div>
+            <span className="text-slate-300">•</span>
+            <div className="flex items-center gap-1.5">
+              <Printer className="h-4 w-4 text-slate-600" strokeWidth={2.2} />
+              <span className="font-mono text-xs font-semibold text-slate-700">
+                {perfilDespachador.impresora_termica_modelo} (
+                {perfilDespachador.ancho_papel_mm}mm)
+              </span>
             </div>
           </div>
 
-          {/* Derecha: Telemetría CTI */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="hidden items-center gap-2.5 rounded-xl border border-white/20 bg-slate-950/35 px-3.5 py-2 backdrop-blur-sm xl:flex">
-              <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                </span>
-                <Scale className="h-4 w-4 text-[#FFCD00]" strokeWidth={2.2} />
-                <span className="font-mono text-xs font-bold tracking-tight text-white">
-                  {perfilDespachador.identificador_balanza}
-                </span>
-              </div>
-              <span className="text-white/30">•</span>
-              <div className="flex items-center gap-1.5">
-                <Printer className="h-4 w-4 text-[#FFCD00]" strokeWidth={2.2} />
-                <span className="font-mono text-xs font-semibold text-slate-200">
-                  {perfilDespachador.impresora_termica_modelo} (
-                  {perfilDespachador.ancho_papel_mm}mm)
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 rounded-xl border border-[#FFCD00]/40 bg-black/25 px-3 py-2">
-              <ShieldCheck
-                className="h-4 w-4 shrink-0 text-[#FFCD00]"
-                strokeWidth={2.2}
-              />
-              <div className="min-w-0 leading-tight">
-                <p className="font-mono text-[10px] font-bold uppercase text-[#FFCD00]">
-                  {perfilDespachador.rol}
-                </p>
-                <p className="truncate text-xs font-bold text-white">
-                  {perfilDespachador.nombre_operador}
-                </p>
-              </div>
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+            <ShieldCheck
+              className="h-4 w-4 shrink-0 text-[#C8102E]"
+              strokeWidth={2.2}
+            />
+            <div className="min-w-0 leading-tight">
+              <p className="font-mono text-[10px] font-bold uppercase text-slate-500">
+                {perfilDespachador.rol}
+              </p>
+              <p className="truncate text-xs font-bold text-slate-900">
+                {perfilDespachador.nombre_operador}
+              </p>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* =====================================================================
           2. CONTENIDO PRINCIPAL
@@ -615,6 +676,18 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                   </span>
                 )}
 
+                {pedido.tipo_venta === 'CREDITO' ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-100 px-3 py-1.5 font-mono text-xs font-black uppercase text-amber-950">
+                    <CreditCard className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    CRÉDITO • {pedido.plazo_dias} días
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-1.5 font-mono text-xs font-black uppercase text-emerald-950">
+                    <Banknote className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    CONTADO
+                  </span>
+                )}
+
                 <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
                   <Clock className="h-3.5 w-3.5 text-slate-500" strokeWidth={2} />
                   <span>Preventa:</span>
@@ -659,6 +732,13 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                 <p className="mt-1 break-words text-base font-black text-slate-900 sm:text-lg">
                   {pedido.cliente.nombre_comercial}
                 </p>
+                {pedido.cliente.razon_social &&
+                  pedido.cliente.razon_social.trim().toUpperCase() !==
+                    pedido.cliente.nombre_comercial.trim().toUpperCase() && (
+                    <p className="mt-0.5 truncate text-xs font-medium text-slate-500">
+                      Razón Social: {pedido.cliente.razon_social}
+                    </p>
+                  )}
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-slate-600">
                   <span className="flex items-center gap-1">
                     <FileText
@@ -676,11 +756,18 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                       strokeWidth={2}
                     />
                     {pedido.cliente.zona.nombre_zona}
-                    {pedido.cliente.zona.ciudad
-                      ? ` · ${pedido.cliente.zona.ciudad}`
-                      : ''}
+                    {pedido.cliente.localidad
+                      ? ` (${pedido.cliente.localidad})`
+                      : pedido.cliente.zona.ciudad
+                        ? ` · ${pedido.cliente.zona.ciudad}`
+                        : ''}
                   </span>
                 </div>
+                {pedido.cliente.direccion && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Dir.: {pedido.cliente.direccion}
+                  </p>
+                )}
               </div>
 
               {/* Vendedor */}
@@ -707,21 +794,54 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
               <div className="min-w-0 rounded-xl border border-y border-r border-amber-200 border-l-4 border-l-[#FFCD00] bg-amber-50/80 p-3.5">
                 <div className="flex items-center gap-1.5 font-mono text-[11px] font-extrabold uppercase tracking-wider text-amber-900">
                   <Info className="h-3.5 w-3.5 shrink-0 text-amber-700" strokeWidth={2.2} />
-                  OBSERVACIONES PREVENTA
+                  OBSERVACIONES
                 </div>
                 {pedido.observaciones ? (
                   <p className="mt-1 break-words text-xs font-semibold leading-relaxed text-amber-950">
+                    <span className="font-bold">Pedido:</span>{' '}
                     {pedido.observaciones}
                   </p>
                 ) : (
                   <p className="mt-1 text-xs italic text-amber-800/70">
-                    Sin observaciones especiales registradas.
+                    Sin observaciones de preventa.
+                  </p>
+                )}
+                {pedido.cliente.observaciones && (
+                  <p className="mt-1.5 break-words border-t border-amber-200/70 pt-1.5 text-xs font-semibold leading-relaxed text-amber-950">
+                    <span className="font-bold">Ficha Cliente:</span>{' '}
+                    {pedido.cliente.observaciones}
                   </p>
                 )}
               </div>
             </div>
           </div>
         </section>
+
+        {pedido.cliente.regla_cortesia_habitual?.trim() && (
+          <div
+            role="note"
+            className="w-full rounded-xl border border-amber-300 border-l-4 border-l-amber-500 bg-amber-50 p-3.5 shadow-xs"
+          >
+            <div className="flex items-start gap-3">
+              <Gift
+                className="mt-0.5 h-5 w-5 shrink-0 text-amber-700"
+                strokeWidth={2.3}
+              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="font-mono text-[11px] font-black uppercase tracking-wider text-amber-900">
+                  CORTESÍA HABITUAL DEL CLIENTE (REGLA SAC)
+                </p>
+                <p className="break-words text-sm font-bold leading-snug text-amber-950">
+                  {pedido.cliente.regla_cortesia_habitual}
+                </p>
+                <p className="text-xs font-medium text-amber-800">
+                  Regla informativa — Agregue manualmente la línea de cortesía
+                  abajo si corresponde.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* GRID OPERATIVO: ZONA IZQUIERDA (PESAJE + CORTESÍAS) | ZONA DERECHA (LIQUIDACIÓN) */}
         <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
@@ -731,8 +851,8 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
               <PlantCardHeaderStrip />
 
               <div className="border-b border-slate-200 bg-slate-50/90 px-4 py-3.5 sm:px-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:items-center">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C8102E] text-white shadow-sm">
                       <Scale className="h-5 w-5" strokeWidth={2.2} />
                     </div>
@@ -753,7 +873,7 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                           {calculos.totalLineasFacturadas} PESADOS
                         </span>
                       </div>
-                      <p className="text-xs font-medium text-slate-500">
+                      <p className="mt-0.5 text-xs font-medium text-slate-500">
                         Ingrese peso real (3 decimales) y presione{' '}
                         <kbd className="rounded border border-slate-300 bg-white px-1 font-mono text-[10px] font-bold">
                           Enter
@@ -763,17 +883,19 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleCopiarTodosEstimados}
-                    className="touch-manipulation flex min-h-[46px] shrink-0 items-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-3.5 py-2 text-xs font-black text-slate-800 shadow-sm transition hover:border-[#C8102E] hover:bg-red-50/40 hover:text-[#C8102E] active:translate-y-[1px]"
-                  >
-                    <CheckCheck
-                      className="h-4 w-4 text-[#C8102E]"
-                      strokeWidth={2.4}
-                    />
-                    <span>Copiar Todos los Estimados</span>
-                  </button>
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={handleCopiarTodosEstimados}
+                      className="touch-manipulation flex min-h-[46px] w-full shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-3.5 py-2 text-xs font-black text-slate-800 shadow-sm transition hover:border-[#C8102E] hover:bg-red-50/40 hover:text-[#C8102E] active:translate-y-[1px] sm:w-auto"
+                    >
+                      <CheckCheck
+                        className="h-4 w-4 text-[#C8102E]"
+                        strokeWidth={2.4}
+                      />
+                      <span>Copiar Todos los Estimados</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
@@ -815,50 +937,115 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                     >
                       {/* Bloque izquierdo: Identidad, Precio y Estimado */}
                       <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-slate-500">
-                            {item.producto.codigo_sku}
-                          </span>
-                          <span
-                            className={`rounded px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider ${badgeFormatoClass(
-                              item.producto.formato
-                            )}`}
-                          >
-                            {item.producto.formato}
-                          </span>
-                          {item.es_cortesia && (
-                            <span className="rounded bg-purple-100 px-2 py-0.5 font-mono text-[10px] font-black text-purple-900">
-                              CORTESÍA
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const esPorUnidad =
+                            String(
+                              item.producto.unidad_medida ?? 'KILO'
+                            ).toUpperCase() === 'UNIDAD';
+                          const pesoUnidadKg =
+                            item.producto.peso_unidad_kilos > 0
+                              ? item.producto.peso_unidad_kilos
+                              : 0.5;
+                          const precioUnitarioPieza =
+                            item.precio_unitario_congelado * pesoUnidadKg;
+                          const unidadesEstimadas =
+                            pesoUnidadKg > 0
+                              ? item.kilos_estimados / pesoUnidadKg
+                              : 0;
 
-                        <h3 className="break-words text-sm font-black leading-snug text-slate-900 sm:text-base">
-                          {item.producto.nombre_producto}
-                        </h3>
+                          return (
+                            <>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-mono text-xs font-bold text-slate-500">
+                                  {item.producto.codigo_sku}
+                                </span>
+                                <span
+                                  className={`rounded px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider ${badgeFormatoClass(
+                                    item.producto.formato
+                                  )}`}
+                                >
+                                  {item.producto.formato}
+                                </span>
+                                {esPorUnidad && (
+                                  <span className="inline-flex items-center gap-1 rounded border border-purple-300 bg-purple-50 px-2 py-0.5 font-mono text-[10px] font-black uppercase text-purple-900">
+                                    <Package
+                                      className="h-3 w-3"
+                                      strokeWidth={2.2}
+                                    />
+                                    PAQ. {Math.round(pesoUnidadKg * 1000)}g
+                                  </span>
+                                )}
+                                {item.es_cortesia && (
+                                  <span className="rounded bg-purple-100 px-2 py-0.5 font-mono text-[10px] font-black text-purple-900">
+                                    CORTESÍA (0.00 Bs)
+                                  </span>
+                                )}
+                              </div>
 
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-xs tabular-nums text-slate-600">
-                          <span>
-                            P.U.:{' '}
-                            <strong className="text-slate-900">
-                              {item.es_cortesia
-                                ? '0.00 Bs'
-                                : `Bs. ${formatBs(item.precio_unitario_congelado)}/kg`}
-                            </strong>
-                          </span>
-                          <span>
-                            Estimado:{' '}
-                            <strong className="text-[#C8102E]">
-                              {formatKg(item.kilos_estimados)} kg
-                            </strong>
-                          </span>
-                          <span>
-                            Cámara:{' '}
-                            <strong className="text-slate-800">
-                              {formatKg(stockProducto)} kg
-                            </strong>
-                          </span>
-                        </div>
+                              <h3 className="break-words text-sm font-black leading-snug text-slate-900 sm:text-base">
+                                {item.producto.nombre_producto}
+                              </h3>
+
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-xs tabular-nums text-slate-600">
+                                {esPorUnidad ? (
+                                  <>
+                                    <span>
+                                      P.U.:{' '}
+                                      <strong className="text-slate-900">
+                                        {item.es_cortesia
+                                          ? '0.00 Bs'
+                                          : `Bs. ${formatBs(precioUnitarioPieza)} / unid.`}
+                                      </strong>{' '}
+                                      <span className="text-[11px] text-slate-400">
+                                        (Bs.{' '}
+                                        {formatBs(
+                                          item.precio_unitario_congelado
+                                        )}
+                                        /kg)
+                                      </span>
+                                    </span>
+                                    <span>
+                                      Estimado:{' '}
+                                      <strong className="text-[#C8102E]">
+                                        {Number.isInteger(
+                                          Math.round(unidadesEstimadas * 10) /
+                                            10
+                                        )
+                                          ? Math.round(unidadesEstimadas)
+                                          : unidadesEstimadas.toFixed(1)}{' '}
+                                        unid. ({formatKg(item.kilos_estimados)}{' '}
+                                        kg)
+                                      </strong>
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>
+                                      P.U.:{' '}
+                                      <strong className="text-slate-900">
+                                        {item.es_cortesia
+                                          ? '0.00 Bs'
+                                          : `Bs. ${formatBs(item.precio_unitario_congelado)}/kg`}
+                                      </strong>
+                                    </span>
+                                    <span>
+                                      Estimado:{' '}
+                                      <strong className="text-[#C8102E]">
+                                        {formatKg(item.kilos_estimados)} kg
+                                      </strong>
+                                    </span>
+                                  </>
+                                )}
+                                <span>
+                                  Cámara:{' '}
+                                  <strong className="text-slate-800">
+                                    {formatKg(stockProducto)} kg
+                                  </strong>
+                                </span>
+                              </div>
+                            </>
+                          );
+                        })()}
 
                         <div className="flex flex-wrap items-center gap-2 pt-0.5">
                           <button
@@ -984,7 +1171,23 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                           ))}
                         </div>
 
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-between gap-2">
+                          {String(
+                            item.producto.unidad_medida ?? 'KILO'
+                          ).toUpperCase() === 'UNIDAD' &&
+                          item.valido &&
+                          item.producto.peso_unidad_kilos > 0 ? (
+                            <span className="inline-flex items-center rounded bg-purple-100 px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums text-purple-900">
+                              Equiv.:{' '}
+                              {(
+                                item.kilosEfectivos /
+                                item.producto.peso_unidad_kilos
+                              ).toFixed(1)}{' '}
+                              unid.
+                            </span>
+                          ) : (
+                            <span />
+                          )}
                           {item.valido ? (
                             <span
                               className={`inline-flex items-center rounded px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums ${
@@ -1016,8 +1219,8 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
 
             {/* BLOQUE B: CORTESÍAS Y DEGUSTACIONES SIN COSTO (RF-08 / CU-D03) */}
             <section className="overflow-hidden rounded-2xl border-2 border-amber-300/90 bg-gradient-to-b from-amber-50/70 to-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/90 bg-amber-100/60 px-4 py-3.5 sm:px-5">
-                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <div className="flex flex-col gap-3 border-b border-amber-200/90 bg-amber-100/60 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:items-center">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-slate-950 shadow-sm">
                     <Gift className="h-5 w-5" strokeWidth={2.2} />
                   </div>
@@ -1030,7 +1233,7 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                         KARDEX FÍSICO ACTIVO
                       </span>
                     </div>
-                    <p className="text-xs font-medium text-amber-950/80">
+                    <p className="mt-0.5 text-xs font-medium text-amber-950/80">
                       Degustación o bonificación comercial. Suma{' '}
                       <strong>0.00 Bs</strong> al cobro, pero{' '}
                       <strong>sí descuenta stock físico</strong> de cámara.
@@ -1039,11 +1242,11 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                 </div>
 
                 {perfilDespachador.autorizado_cortesias ? (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                     <button
                       type="button"
                       onClick={() => handleAgregarCortesia('0.400')}
-                      className="touch-manipulation flex min-h-[46px] shrink-0 items-center gap-1.5 rounded-xl border-2 border-amber-500 bg-white px-3 py-2 font-mono text-xs font-black text-amber-950 shadow-sm transition hover:bg-amber-50 active:translate-y-[1px]"
+                      className="touch-manipulation flex min-h-[46px] flex-1 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-amber-500 bg-white px-3 py-2 font-mono text-xs font-black text-amber-950 shadow-sm transition hover:bg-amber-50 active:translate-y-[1px] sm:flex-initial"
                     >
                       <Plus
                         className="h-4 w-4 text-amber-600"
@@ -1054,14 +1257,14 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                     <button
                       type="button"
                       onClick={() => handleAgregarCortesia('')}
-                      className="touch-manipulation flex min-h-[46px] shrink-0 items-center gap-2 rounded-xl border-2 border-amber-600 bg-[#FFCD00] px-4 py-2 text-sm font-black text-slate-950 shadow-sm transition hover:bg-amber-400 active:translate-y-[1px]"
+                      className="touch-manipulation flex min-h-[46px] flex-1 shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-amber-600 bg-[#FFCD00] px-4 py-2 text-sm font-black text-slate-950 shadow-sm transition hover:bg-amber-400 active:translate-y-[1px] sm:flex-initial"
                     >
                       <Plus className="h-4 w-4" strokeWidth={2.5} />
-                      <span>+ Agregar Cortesía</span>
+                      <span>Agregar Cortesía</span>
                     </button>
                   </div>
                 ) : (
-                  <span className="rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 font-mono text-xs font-bold text-slate-500">
+                  <span className="self-start rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 font-mono text-xs font-bold text-slate-500 sm:self-center">
                     SIN PERMISO DE CORTESÍAS
                   </span>
                 )}
@@ -1110,7 +1313,7 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                           <div className="min-w-0 flex-1">
                             <div className="mb-1.5 flex flex-wrap items-center gap-2">
                               <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 font-mono text-[11px] font-black text-emerald-900">
-                                CORTESÍA • 0.00 Bs
+                                CORTESÍA (0.00 Bs)
                               </span>
                               {cort.producto && (
                                 <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-slate-600">
@@ -1118,29 +1321,78 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                                   {formatKg(cort.producto.stock_fisico_kilos)} kg
                                 </span>
                               )}
+                              {cort.producto &&
+                                String(
+                                  cort.producto.unidad_medida ?? 'KILO'
+                                ).toUpperCase() === 'UNIDAD' &&
+                                cort.kilosEfectivos > 0 &&
+                                cort.producto.peso_unidad_kilos > 0 && (
+                                  <span className="rounded bg-purple-100 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-purple-900">
+                                    {(
+                                      cort.kilosEfectivos /
+                                      cort.producto.peso_unidad_kilos
+                                    ).toFixed(1)}{' '}
+                                    unid.
+                                  </span>
+                                )}
                             </div>
 
-                            <select
-                              aria-label="Seleccionar producto para cortesía"
-                              value={cort.id_producto}
-                              onChange={(e) =>
-                                handleActualizarCortesiaProducto(
-                                  cort.id_temp,
-                                  Number(e.target.value)
-                                )
+                            <button
+                              type="button"
+                              onClick={() =>
+                                abrirModalCortesiaProducto(cort.id_temp)
                               }
-                              className="min-h-[48px] w-full min-w-0 truncate rounded-xl border-2 border-slate-200 bg-slate-50/70 px-3 text-sm font-bold text-slate-900 transition focus:border-[#C8102E] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#FFCD00]/30"
+                              aria-label="Seleccionar producto para cortesía"
+                              className="touch-manipulation flex min-h-[48px] w-full items-center justify-between gap-2.5 rounded-xl border-2 border-slate-200 bg-slate-50/70 px-3 py-2 text-left transition hover:border-[#C8102E] hover:bg-white focus:border-[#C8102E] focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
                             >
-                              {productosCortesiaElegibles.map((prod) => (
-                                <option
-                                  key={prod.id_producto}
-                                  value={prod.id_producto}
-                                >
-                                  [{prod.codigo_sku}] {prod.nombre_producto} (
-                                  {prod.formato})
-                                </option>
-                              ))}
-                            </select>
+                              {cort.producto ? (
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
+                                      {cort.producto.codigo_sku}
+                                    </span>
+                                    <span
+                                      className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-black uppercase ${badgeFormatoClass(
+                                        cort.producto.formato
+                                      )}`}
+                                    >
+                                      {cort.producto.formato}
+                                    </span>
+                                    {String(
+                                      cort.producto.unidad_medida ?? 'KILO'
+                                    ).toUpperCase() === 'UNIDAD' && (
+                                      <span className="inline-flex items-center gap-1 rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 font-mono text-[10px] font-black text-purple-900">
+                                        <Package className="h-3 w-3" />
+                                        UNIDAD{' '}
+                                        {Math.round(
+                                          (cort.producto.peso_unidad_kilos ||
+                                            0.5) * 1000
+                                        )}
+                                        g
+                                      </span>
+                                    )}
+                                    <span className="font-mono text-[11px] font-semibold tabular-nums text-slate-500">
+                                      Stock:{' '}
+                                      {formatKg(
+                                        cort.producto.stock_fisico_kilos
+                                      )}{' '}
+                                      kg
+                                    </span>
+                                  </div>
+                                  <p className="break-words text-sm font-bold leading-snug text-slate-900">
+                                    {cort.producto.nombre_producto}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="text-sm font-semibold text-slate-500">
+                                  Toque para elegir producto...
+                                </span>
+                              )}
+                              <ChevronDown
+                                className="h-4 w-4 shrink-0 text-slate-500"
+                                strokeWidth={2.2}
+                              />
+                            </button>
 
                             {superaStock && (
                               <p className="mt-1 flex items-center gap-1 text-xs font-bold text-[#C8102E]">
@@ -1151,7 +1403,7 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                             )}
                           </div>
 
-                          <div className="flex items-end justify-end gap-3 shrink-0">
+                          <div className="flex flex-wrap items-end justify-end gap-3 shrink-0">
                             <div className="w-40 sm:w-44">
                               <label className="mb-1 block font-mono text-[10px] font-bold uppercase text-slate-500">
                                 Peso Gancho (Kg)
@@ -1183,6 +1435,15 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                                   kg
                                 </span>
                               </div>
+                            </div>
+
+                            <div className="min-w-[78px] text-right">
+                              <span className="block font-mono text-[10px] font-bold uppercase text-emerald-700">
+                                Subtotal
+                              </span>
+                              <span className="font-mono text-sm font-black tabular-nums text-emerald-800">
+                                Bs. 0.00
+                              </span>
                             </div>
 
                             <button
@@ -1311,6 +1572,29 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                   </div>
                 )}
 
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                  <label
+                    htmlFor="nro-doc-sac-input"
+                    className="mb-1.5 flex items-center justify-between font-mono text-[11px] font-bold uppercase tracking-wider text-slate-600"
+                  >
+                    <span>N° Doc. SAC (Opcional)</span>
+                    <span className="text-[10px] font-semibold text-slate-400">
+                      Referencia SAC
+                    </span>
+                  </label>
+                  <input
+                    id="nro-doc-sac-input"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Ej: 45892"
+                    value={nroDocSac}
+                    onChange={(e) =>
+                      setNroDocSac(e.target.value.replace(/[^0-9]/g, ''))
+                    }
+                    className="min-h-[44px] w-full rounded-lg border border-slate-300 bg-white px-3 font-mono text-sm font-bold tabular-nums text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:border-[#C8102E] focus:outline-none focus:ring-2 focus:ring-[#FFCD00]/40"
+                  />
+                </div>
+
                 <div className="space-y-2.5 pt-1">
                   <button
                     type="button"
@@ -1343,7 +1627,7 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                     className="touch-manipulation flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                   >
                     <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
-                    <span>← Volver a Bandeja</span>
+                    <span>Volver a Bandeja</span>
                   </Link>
                 </div>
               </div>
@@ -1526,6 +1810,16 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                     Bs. {formatBs(calculos.totalCobrarBs)}
                   </span>
                 </div>
+                {nroDocSacNumerico !== null && (
+                  <div className="flex justify-between border-t border-slate-200 pt-2 text-xs">
+                    <span className="font-semibold text-slate-600">
+                      N° Doc. SAC:
+                    </span>
+                    <span className="font-mono font-bold tabular-nums text-slate-900">
+                      {nroDocSacNumerico}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
@@ -1554,6 +1848,173 @@ export const EstacionPesajeClient: React.FC<EstacionPesajeClientProps> = ({
                   </span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL / BOTTOM-SHEET BUSCADOR DE PRODUCTOS PARA CORTESÍA */}
+      {cortesiaModalLineId && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-selector-cortesia-titulo"
+        >
+          <div
+            className="fixed inset-0"
+            onClick={() => setCortesiaModalLineId(null)}
+          />
+
+          <div className="relative z-10 flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border-2 border-slate-200 bg-white shadow-2xl sm:rounded-2xl">
+            <div className="flex h-1.5 w-full shrink-0">
+              <div className="w-2/3 bg-[#C8102E]" />
+              <div className="w-1/3 bg-[#FFCD00]" />
+            </div>
+
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3.5">
+              <div className="min-w-0">
+                <h3
+                  id="modal-selector-cortesia-titulo"
+                  className="text-base font-extrabold tracking-tight text-slate-900"
+                >
+                  Seleccionar Producto de Cortesía
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-600">
+                  Descuento físico en cámara a 0.00 Bs (todos los SKUs activos)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCortesiaModalLineId(null)}
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 active:scale-95"
+                aria-label="Cerrar selector de producto de cortesía"
+              >
+                <X className="h-5 w-5" strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 border-b border-slate-200 bg-white p-3.5">
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3.5 h-5 w-5 -translate-y-1/2 text-slate-400"
+                  strokeWidth={2}
+                />
+                <input
+                  type="text"
+                  autoFocus
+                  value={busquedaCortesiaProd}
+                  onChange={(e) => setBusquedaCortesiaProd(e.target.value)}
+                  placeholder="Buscar por código SKU o nombre de producto..."
+                  className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/70 pr-9 pl-11 text-base text-slate-900 shadow-inner transition focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                />
+                {busquedaCortesiaProd && (
+                  <button
+                    type="button"
+                    onClick={() => setBusquedaCortesiaProd('')}
+                    aria-label="Limpiar búsqueda"
+                    className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-slate-700"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(['TODOS', 'GRANEL', 'VACIO'] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() => setFormatoCortesiaFiltro(fmt)}
+                    className={`min-h-[38px] rounded-xl border px-3 font-mono text-xs font-bold transition ${
+                      formatoCortesiaFiltro === fmt
+                        ? 'border-slate-900 bg-slate-900 text-[#FFCD00]'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {fmt === 'TODOS' ? 'Todos' : fmt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-2 overflow-y-auto p-3.5">
+              {productosCortesiaFiltrados.length === 0 ? (
+                <div className="py-10 text-center text-slate-500">
+                  <p className="text-sm font-semibold">
+                    No se encontraron productos con &ldquo;{busquedaCortesiaProd}
+                    &rdquo;
+                  </p>
+                </div>
+              ) : (
+                productosCortesiaFiltrados.map((prod) => {
+                  const isSelected =
+                    lineaCortesiaActivaModal?.id_producto === prod.id_producto;
+                  const esPorUnidad =
+                    String(prod.unidad_medida ?? 'KILO').toUpperCase() ===
+                    'UNIDAD';
+                  const pesoGr = Math.round(
+                    (prod.peso_unidad_kilos || 0.5) * 1000
+                  );
+
+                  return (
+                    <button
+                      key={prod.id_producto}
+                      type="button"
+                      onClick={() => {
+                        handleActualizarCortesiaProducto(
+                          cortesiaModalLineId,
+                          prod.id_producto
+                        );
+                        setCortesiaModalLineId(null);
+                      }}
+                      className={`flex min-h-[52px] w-full items-start justify-between gap-3 rounded-xl border-2 p-3 text-left transition ${
+                        isSelected
+                          ? 'border-[#C8102E] bg-red-50/40 ring-2 ring-[#FFCD00]/50'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white">
+                            {prod.codigo_sku}
+                          </span>
+                          <span
+                            className={`rounded px-2 py-0.5 font-mono text-[10px] font-black uppercase ${badgeFormatoClass(
+                              prod.formato
+                            )}`}
+                          >
+                            {prod.formato}
+                          </span>
+                          {esPorUnidad && (
+                            <span className="inline-flex items-center gap-1 rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 font-mono text-[10px] font-black text-purple-900">
+                              <Package className="h-3 w-3" />
+                              UNIDAD {pesoGr}g
+                            </span>
+                          )}
+                        </div>
+                        <p className="break-words text-sm font-bold leading-snug text-slate-900">
+                          {prod.nombre_producto}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 flex-col items-end justify-between text-right">
+                        <span className="font-mono text-[10px] font-bold uppercase text-slate-400">
+                          Físico
+                        </span>
+                        <span className="font-mono text-xs font-black tabular-nums text-slate-900">
+                          {formatKg(prod.stock_fisico_kilos)} kg
+                        </span>
+                        {isSelected && (
+                          <span className="mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#C8102E] text-white">
+                            <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

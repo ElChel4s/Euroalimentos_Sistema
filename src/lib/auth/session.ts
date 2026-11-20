@@ -2,6 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { connection } from 'next/server';
 import { redirect } from 'next/navigation';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import type {
   PerfilAdministrador,
@@ -18,6 +19,7 @@ interface UsuarioConPerfilRaw {
   nombre_completo: string;
   username: string;
   telefono: string | null;
+  codigo_empleado_sac: string | null;
   rol: RolUsuarioEnum;
   activo: boolean;
   creado_en: string;
@@ -27,6 +29,22 @@ interface UsuarioConPerfilRaw {
   perfil_administrador: PerfilAdministrador | PerfilAdministrador[] | null;
 }
 
+const USUARIO_CON_PERFIL_SELECT = `
+  id_usuario,
+  auth_id,
+  nombre_completo,
+  username,
+  telefono,
+  codigo_empleado_sac,
+  rol,
+  activo,
+  creado_en,
+  perfil_vendedor (*),
+  perfil_despachador (*),
+  perfil_produccion (*),
+  perfil_administrador (*)
+`;
+
 function normalizeOneToOne<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
@@ -35,7 +53,7 @@ function normalizeOneToOne<T>(value: T | T[] | null | undefined): T | null {
 /**
  * Obtiene en servidor el usuario activo autenticado junto con su perfil
  * especializado CTI (1:1) según su rol. Memorizado por request con `React.cache()`.
- * Retorna null si no existe sesión o está inactivo.
+ * Usa cliente administrativo en servidor para evitar bloqueos RLS tras resiembra de usuarios.
  */
 export const getUsuarioConPerfilActivo = cache(
   async (): Promise<UsuarioConPerfil | null> => {
@@ -51,27 +69,38 @@ export const getUsuarioConPerfilActivo = cache(
       return null;
     }
 
-    const { data, error } = await supabase
+    const dbClient = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createSupabaseAdminClient()
+      : supabase;
+
+    let { data, error } = await dbClient
       .from('usuarios')
-      .select(
-        `
-      id_usuario,
-      auth_id,
-      nombre_completo,
-      username,
-      telefono,
-      rol,
-      activo,
-      creado_en,
-      perfil_vendedor (*),
-      perfil_despachador (*),
-      perfil_produccion (*),
-      perfil_administrador (*)
-    `
-      )
+      .select(USUARIO_CON_PERFIL_SELECT)
       .eq('auth_id', user.id)
       .eq('activo', true)
       .maybeSingle<UsuarioConPerfilRaw>();
+
+    // Fallback por username (desde el correo Auth) si el auth_id aún no está vinculado
+    if ((!data || error) && user.email) {
+      const usernameFromEmail = user.email.split('@')[0]?.trim().toLowerCase();
+      if (usernameFromEmail) {
+        const fallback = await dbClient
+          .from('usuarios')
+          .select(USUARIO_CON_PERFIL_SELECT)
+          .ilike('username', usernameFromEmail)
+          .eq('activo', true)
+          .maybeSingle<UsuarioConPerfilRaw>();
+
+        if (!fallback.error && fallback.data) {
+          await dbClient
+            .from('usuarios')
+            .update({ auth_id: user.id })
+            .eq('id_usuario', fallback.data.id_usuario);
+          data = { ...fallback.data, auth_id: user.id };
+          error = null;
+        }
+      }
+    }
 
     if (error || !data) {
       return null;
@@ -83,6 +112,7 @@ export const getUsuarioConPerfilActivo = cache(
       nombre_completo: data.nombre_completo,
       username: data.username,
       telefono: data.telefono,
+      codigo_empleado_sac: data.codigo_empleado_sac ?? null,
       rol: data.rol,
       activo: data.activo,
       creado_en: data.creado_en,
@@ -107,4 +137,3 @@ export async function requireRolUsuario(
   }
   return usuario;
 }
-

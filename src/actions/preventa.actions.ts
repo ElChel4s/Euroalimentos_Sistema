@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { getUsuarioConPerfilActivo } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import type { FormatoProductoEnum } from '@/types/database.types';
+import type {
+  FormatoProductoEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
+} from '@/types/database.types';
 
 /**
  * Ítem de catálogo seguro para el rol VENDEDOR.
@@ -16,6 +20,9 @@ export interface ProductoPreventaItem {
   id_categoria: number;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida?: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos?: number;
+  stock_minimo_alerta?: number;
   precio_kilo_bs: number;
   requiere_produccion: boolean;
   categorias_producto?: { nombre_categoria: string };
@@ -35,10 +42,18 @@ export interface ClientePreventaItem {
   id_cliente: number;
   codigo_cliente_sac: string;
   nombre_comercial: string;
+  razon_social?: string | null;
   id_zona: number;
   zona: string;
   nit_ci: string | null;
   telefono: string | null;
+  direccion?: string | null;
+  localidad?: string | null;
+  forma_pago_habitual?: TipoVenta;
+  plazo_dias?: number;
+  limite_credito_bs?: number;
+  regla_cortesia_habitual?: string | null;
+  observaciones?: string | null;
   zonas_mercado?: { id_zona: number; nombre_zona: string } | null;
 }
 
@@ -46,6 +61,8 @@ export interface RegistrarPreventaInput {
   id_cliente: number;
   observaciones: string;
   items: { id_producto: number; kilos_estimados: number }[];
+  tipo_venta?: TipoVenta;
+  plazo_dias?: number;
 }
 
 export type RegistrarPreventaResult =
@@ -54,10 +71,18 @@ export type RegistrarPreventaResult =
 
 export interface CrearClienteRapidoInput {
   nombre_comercial: string;
+  razon_social?: string;
   id_zona?: number | null;
   nueva_zona_nombre?: string;
   nit_ci?: string;
   telefono?: string;
+  direccion?: string;
+  localidad?: string;
+  forma_pago_habitual?: TipoVenta;
+  plazo_dias?: number;
+  limite_credito_bs?: number;
+  regla_cortesia_habitual?: string;
+  observaciones?: string;
   codigo_cliente_sac?: string;
 }
 
@@ -78,9 +103,17 @@ interface ClienteInsertRowRaw {
   id_cliente: number;
   codigo_cliente_sac: string;
   nombre_comercial: string;
+  razon_social: string | null;
   id_zona: number;
   nit_ci: string | null;
   telefono: string | null;
+  direccion: string | null;
+  localidad: string | null;
+  forma_pago_habitual: TipoVenta;
+  plazo_dias: number;
+  limite_credito_bs: number;
+  regla_cortesia_habitual: string | null;
+  observaciones: string | null;
   zonas_mercado: ZonaRelationRaw | ZonaRelationRaw[] | null;
 }
 
@@ -127,15 +160,42 @@ export async function registrarPreventaAction(
     (item) =>
       !Number.isInteger(item.id_producto) ||
       item.id_producto <= 0 ||
-      !Number.isInteger(item.kilos_estimados) ||
-      item.kilos_estimados < 1
+      typeof item.kilos_estimados !== 'number' ||
+      !Number.isFinite(item.kilos_estimados) ||
+      item.kilos_estimados <= 0
   );
 
   if (itemsInvalidos) {
     return {
       ok: false,
       error:
-        'Todos los productos deben tener una cantidad entera positiva de kilos (>= 1 kg).',
+        'Todos los productos deben tener una cantidad positiva mayor a 0 kg.',
+    };
+  }
+
+  const itemsNormalizados = input.items.map((item) => ({
+    id_producto: item.id_producto,
+    kilos_estimados: Number(item.kilos_estimados.toFixed(3)),
+  }));
+
+  if (itemsNormalizados.some((item) => item.kilos_estimados <= 0)) {
+    return {
+      ok: false,
+      error: 'Cada ítem debe tener un peso estimado mayor a 0.000 kg.',
+    };
+  }
+
+  const tipoVenta: TipoVenta =
+    input.tipo_venta === 'CREDITO' ? 'CREDITO' : 'CONTADO';
+  const plazoDias =
+    tipoVenta === 'CREDITO'
+      ? Math.max(0, Math.trunc(Number(input.plazo_dias ?? 0)))
+      : 0;
+
+  if (!Number.isFinite(plazoDias)) {
+    return {
+      ok: false,
+      error: 'El plazo en días debe ser un número entero válido.',
     };
   }
 
@@ -145,7 +205,9 @@ export async function registrarPreventaAction(
     p_id_cliente: input.id_cliente,
     p_id_vendedor: usuario.id_usuario,
     p_observaciones: input.observaciones.trim() || null,
-    p_items: input.items,
+    p_items: itemsNormalizados,
+    p_tipo_venta: tipoVenta,
+    p_plazo_dias: plazoDias,
   });
 
   if (error) {
@@ -265,18 +327,37 @@ export async function crearClienteRapidoAction(
     input.codigo_cliente_sac?.trim().toUpperCase() ||
     `CLI-${Date.now().toString().slice(-6)}`;
 
+  const formaPagoRapida: TipoVenta =
+    input.forma_pago_habitual === 'CREDITO' ? 'CREDITO' : 'CONTADO';
+  const plazoRapido =
+    formaPagoRapida === 'CREDITO'
+      ? Math.max(0, Math.trunc(Number(input.plazo_dias ?? 0)))
+      : 0;
+  const limiteCreditoRapido =
+    formaPagoRapida === 'CREDITO'
+      ? Math.max(0, Number(Number(input.limite_credito_bs ?? 0).toFixed(2)))
+      : 0;
+
   const { data, error } = await supabase
     .from('clientes')
     .insert({
       nombre_comercial: nombreComercial,
+      razon_social: input.razon_social?.trim() || nombreComercial,
       id_zona: idZonaFinal,
       nit_ci: input.nit_ci?.trim() || null,
       telefono: input.telefono?.trim() || null,
+      direccion: input.direccion?.trim() || null,
+      localidad: input.localidad?.trim() || null,
+      forma_pago_habitual: formaPagoRapida,
+      plazo_dias: plazoRapido,
+      limite_credito_bs: limiteCreditoRapido,
+      regla_cortesia_habitual: input.regla_cortesia_habitual?.trim() || null,
+      observaciones: input.observaciones?.trim() || null,
       codigo_cliente_sac: codigoClienteSac,
       activo: true,
     })
     .select(
-      'id_cliente, codigo_cliente_sac, nombre_comercial, id_zona, nit_ci, telefono, zonas_mercado(id_zona, nombre_zona)'
+      'id_cliente, codigo_cliente_sac, nombre_comercial, razon_social, id_zona, nit_ci, telefono, direccion, localidad, forma_pago_habitual, plazo_dias, limite_credito_bs, regla_cortesia_habitual, observaciones, zonas_mercado(id_zona, nombre_zona)'
     )
     .single<ClienteInsertRowRaw>();
 
@@ -303,10 +384,18 @@ export async function crearClienteRapidoAction(
       id_cliente: data.id_cliente,
       codigo_cliente_sac: data.codigo_cliente_sac,
       nombre_comercial: data.nombre_comercial,
+      razon_social: data.razon_social,
       id_zona: data.id_zona,
       zona: zonaRelacion?.nombre_zona ?? (nuevaZonaTexto || 'Sin zona'),
       nit_ci: data.nit_ci,
       telefono: data.telefono,
+      direccion: data.direccion,
+      localidad: data.localidad,
+      forma_pago_habitual: data.forma_pago_habitual ?? 'CONTADO',
+      plazo_dias: Number(data.plazo_dias ?? 0),
+      limite_credito_bs: Number(data.limite_credito_bs ?? 0),
+      regla_cortesia_habitual: data.regla_cortesia_habitual,
+      observaciones: data.observaciones,
       zonas_mercado: zonaRelacion,
     },
   };

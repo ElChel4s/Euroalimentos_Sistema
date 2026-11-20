@@ -7,11 +7,13 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Ban,
+  Banknote,
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
+  CreditCard,
   Edit3,
   Eye,
   Filter,
@@ -34,6 +36,7 @@ import {
 import type {
   EstadoPedidoEnum,
   FormatoProductoEnum,
+  TipoVenta,
 } from '@/types/database.types';
 
 export interface DetallePedidoAuditoriaItem {
@@ -49,6 +52,8 @@ export interface DetallePedidoAuditoriaItem {
     codigo_sku: string;
     nombre_producto: string;
     formato: FormatoProductoEnum;
+    unidad_medida?: string;
+    peso_unidad_kilos?: number;
   };
 }
 
@@ -66,7 +71,10 @@ export interface AnulacionPedidoAdmin {
 export interface PedidoAuditoriaAdmin {
   id_pedido: number;
   nro_nota_venta: number | null;
+  nro_documento_sac?: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta?: TipoVenta;
+  plazo_dias?: number;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -261,6 +269,7 @@ export function AuditorVentasAdminClient({
   const [filtroVendedor, setFiltroVendedor] = useState<string>('TODOS');
   const [filtroZona, setFiltroZona] = useState<string>('TODAS');
   const [filtroProducto, setFiltroProducto] = useState<string>('TODOS');
+  const [filtroPago, setFiltroPago] = useState<'TODOS' | TipoVenta>('TODOS');
   const [filtroEstado, setFiltroEstado] = useState<'TODOS' | EstadoPedidoEnum>(
     'TODOS'
   );
@@ -364,10 +373,12 @@ export function AuditorVentasAdminClient({
       if (q) {
         const notaPad = formatNota(p.nro_nota_venta)?.toLowerCase() ?? '';
         const notaRaw = String(p.nro_nota_venta ?? '');
+        const sacDocRaw = String(p.nro_documento_sac ?? '').toLowerCase();
         const pedCode = formatPedidoCode(p.id_pedido).toLowerCase();
         const pedIdStr = String(p.id_pedido);
 
-        const matchNota = notaPad.includes(q) || notaRaw.includes(q);
+        const matchNota =
+          notaPad.includes(q) || notaRaw.includes(q) || sacDocRaw.includes(q);
         const matchId =
           pedCode.includes(q) ||
           `#${pedCode}`.includes(q) ||
@@ -383,6 +394,12 @@ export function AuditorVentasAdminClient({
         if (!matchNota && !matchId && !matchCliente && !matchProducto) {
           return false;
         }
+      }
+
+      const tipoPagoPedido: TipoVenta =
+        p.tipo_venta === 'CREDITO' ? 'CREDITO' : 'CONTADO';
+      if (filtroPago !== 'TODOS' && tipoPagoPedido !== filtroPago) {
+        return false;
       }
 
       const fechaPedido = toFechaBoliviaYmd(p.fecha_preventa);
@@ -417,6 +434,7 @@ export function AuditorVentasAdminClient({
   }, [
     pedidosInternos,
     busqueda,
+    filtroPago,
     fechaDesde,
     fechaHasta,
     filtroVendedor,
@@ -1075,6 +1093,41 @@ export function AuditorVentasAdminClient({
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 font-mono text-[11px] font-bold uppercase text-slate-500">
+                Pago:
+              </span>
+              {(
+                [
+                  { id: 'TODOS', label: 'Todos' },
+                  { id: 'CONTADO', label: 'CONTADO' },
+                  { id: 'CREDITO', label: 'CRÉDITO' },
+                ] as const
+              ).map((pagoOpt) => (
+                <button
+                  key={pagoOpt.id}
+                  type="button"
+                  onClick={() => {
+                    setFiltroPago(pagoOpt.id);
+                    setPaginaActual(1);
+                  }}
+                  className={`touch-manipulation inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-all ${
+                    filtroPago === pagoOpt.id
+                      ? 'border-[#C8102E] bg-[#C8102E] text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {pagoOpt.id === 'CONTADO' && (
+                    <Banknote className="h-3.5 w-3.5" />
+                  )}
+                  {pagoOpt.id === 'CREDITO' && (
+                    <CreditCard className="h-3.5 w-3.5" />
+                  )}
+                  <span>{pagoOpt.label}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1 xl:pb-0">
               <button
                 type="button"
@@ -1307,8 +1360,29 @@ export function AuditorVentasAdminClient({
                             )}
                             <ArrowUpRight className="h-3.5 w-3.5 text-[#C8102E] opacity-0 transition-opacity group-hover:opacity-100" />
                           </div>
-                          <div className="mt-0.5 font-mono text-xs font-semibold tabular-nums text-slate-600">
-                            #{formatPedidoCode(pedido.id_pedido)}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-xs font-semibold tabular-nums text-slate-600">
+                              #{formatPedidoCode(pedido.id_pedido)}
+                            </span>
+                            {pedido.nro_documento_sac !== null &&
+                              pedido.nro_documento_sac !== undefined && (
+                                <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">
+                                  SAC N° {pedido.nro_documento_sac}
+                                </span>
+                              )}
+                          </div>
+                          <div className="mt-1">
+                            {pedido.tipo_venta === 'CREDITO' ? (
+                              <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-amber-950">
+                                <CreditCard className="h-3 w-3" />
+                                CRÉDITO • {pedido.plazo_dias ?? 0}d
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-emerald-950">
+                                <Banknote className="h-3 w-3" />
+                                CONTADO
+                              </span>
+                            )}
                           </div>
                           <div className="mt-0.5 font-mono text-[11px] tabular-nums text-slate-500">
                             {formatFechaCortaBolivia(
@@ -1341,6 +1415,51 @@ export function AuditorVentasAdminClient({
                             <span className="truncate text-xs text-slate-500">
                               {pedido.clientes.zona.nombre_zona}
                             </span>
+                          </div>
+                          <div className="mt-2 space-y-1 border-t border-slate-100 pt-1.5">
+                            {pedido.detalle_pedidos.map((det) => {
+                              const esCort = Boolean(
+                                det.es_cortesia ||
+                                  pedido.es_pedido_cortesia_pura
+                              );
+                              const kilosDet =
+                                pedido.estado === 'PENDIENTE'
+                                  ? det.kilos_estimados
+                                  : Number(
+                                      det.kilos_reales ??
+                                        det.kilos_estimados ??
+                                        0
+                                    );
+                              const esUnidad =
+                                String(
+                                  det.producto.unidad_medida ?? 'KILO'
+                                ).toUpperCase() === 'UNIDAD';
+                              const pesoUnidad =
+                                (det.producto.peso_unidad_kilos ?? 0) > 0
+                                  ? det.producto.peso_unidad_kilos!
+                                  : 0.5;
+                              const unidades = kilosDet / pesoUnidad;
+                              return (
+                                <div
+                                  key={det.id_detalle}
+                                  className="flex items-center justify-between gap-2 text-[11px]"
+                                >
+                                  <span className="truncate text-slate-700">
+                                    <span className="font-mono font-bold text-slate-500">
+                                      {det.producto.codigo_sku}
+                                    </span>{' '}
+                                    {det.producto.nombre_producto}
+                                  </span>
+                                  <span className="shrink-0 font-mono font-bold tabular-nums text-slate-800">
+                                    {kilosDet.toFixed(3)}kg
+                                    {esUnidad
+                                      ? ` (${unidades.toFixed(0)}u)`
+                                      : ''}
+                                    {esCort ? ' · 0.00 Bs' : ''}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </td>
 
@@ -1474,6 +1593,21 @@ export function AuditorVentasAdminClient({
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-slate-700">
                             #{formatPedidoCode(pedido.id_pedido)}
                           </span>
+                          {pedido.nro_documento_sac !== null &&
+                            pedido.nro_documento_sac !== undefined && (
+                              <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">
+                                SAC N° {pedido.nro_documento_sac}
+                              </span>
+                            )}
+                          {pedido.tipo_venta === 'CREDITO' ? (
+                            <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-amber-950">
+                              CRÉDITO • {pedido.plazo_dias ?? 0}d
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-emerald-950">
+                              CONTADO
+                            </span>
+                          )}
                         </div>
                         <p className="mt-0.5 font-mono text-xs tabular-nums text-slate-500">
                           {formatFechaCortaBolivia(
@@ -1512,6 +1646,48 @@ export function AuditorVentasAdminClient({
                             ? pedido.despachador.nombre_completo
                             : 'Pendiente'}
                         </span>
+                      </div>
+                      <div className="space-y-1 border-t border-slate-200/70 pt-1.5">
+                        {pedido.detalle_pedidos.map((det) => {
+                          const esCort = Boolean(
+                            det.es_cortesia || pedido.es_pedido_cortesia_pura
+                          );
+                          const kilosDet =
+                            pedido.estado === 'PENDIENTE'
+                              ? det.kilos_estimados
+                              : Number(
+                                  det.kilos_reales ?? det.kilos_estimados ?? 0
+                                );
+                          const esUnidad =
+                            String(
+                              det.producto.unidad_medida ?? 'KILO'
+                            ).toUpperCase() === 'UNIDAD';
+                          const pesoUnidad =
+                            (det.producto.peso_unidad_kilos ?? 0) > 0
+                              ? det.producto.peso_unidad_kilos!
+                              : 0.5;
+                          return (
+                            <div
+                              key={det.id_detalle}
+                              className="flex items-center justify-between gap-2 text-[11px]"
+                            >
+                              <span className="truncate text-slate-700">
+                                <span className="font-mono font-bold text-slate-500">
+                                  {det.producto.codigo_sku}
+                                </span>{' '}
+                                {det.producto.nombre_producto}
+                                {esCort ? ' [CORTESÍA]' : ''}
+                              </span>
+                              <span className="shrink-0 font-mono font-bold tabular-nums text-slate-900">
+                                {kilosDet.toFixed(3)}kg
+                                {esUnidad
+                                  ? ` (${(kilosDet / pesoUnidad).toFixed(0)}u)`
+                                  : ''}{' '}
+                                · {esCort ? '0.00 Bs' : formatBs(det.subtotal_bs)}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -1654,6 +1830,23 @@ export function AuditorVentasAdminClient({
                     REGISTRO DE AUDITORÍA
                   </span>
                   {renderEstadoBadge(pedidoAuditar.estado)}
+                  {pedidoAuditar.tipo_venta === 'CREDITO' ? (
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-100 px-2.5 py-0.5 font-mono text-xs font-extrabold text-amber-950">
+                      <CreditCard className="h-3.5 w-3.5" />
+                      CRÉDITO • {pedidoAuditar.plazo_dias ?? 0} días
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-100 px-2.5 py-0.5 font-mono text-xs font-extrabold text-emerald-950">
+                      <Banknote className="h-3.5 w-3.5" />
+                      CONTADO
+                    </span>
+                  )}
+                  {pedidoAuditar.nro_documento_sac !== null &&
+                    pedidoAuditar.nro_documento_sac !== undefined && (
+                      <span className="rounded-lg border border-slate-300 bg-white px-2.5 py-0.5 font-mono text-xs font-bold text-slate-800">
+                        Doc. SAC N° {pedidoAuditar.nro_documento_sac}
+                      </span>
+                    )}
                 </div>
                 <h2
                   id="modal-auditoria-titulo"
@@ -1813,6 +2006,14 @@ export function AuditorVentasAdminClient({
                         const kilosReales = Number(
                           det.kilos_reales ?? det.kilos_estimados ?? 0
                         );
+                        const esUnidad =
+                          String(
+                            det.producto.unidad_medida ?? 'KILO'
+                          ).toUpperCase() === 'UNIDAD';
+                        const pesoUnidad =
+                          (det.producto.peso_unidad_kilos ?? 0) > 0
+                            ? det.producto.peso_unidad_kilos!
+                            : 0.5;
                         return (
                           <tr
                             key={det.id_detalle}
@@ -1831,15 +2032,34 @@ export function AuditorVentasAdminClient({
                               <div className="font-mono text-[11px] text-slate-500">
                                 {det.producto.codigo_sku} •{' '}
                                 {det.producto.formato}
+                                {esUnidad
+                                  ? ` • PAQ. ${Math.round(pesoUnidad * 1000)}g`
+                                  : ''}
                               </div>
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-600">
                               {Number(det.kilos_estimados).toFixed(3)}
+                              {esUnidad && (
+                                <span className="block text-[10px] text-purple-800">
+                                  {(Number(det.kilos_estimados) / pesoUnidad).toFixed(1)}{' '}
+                                  unid.
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono font-bold tabular-nums text-slate-900">
-                              {pedidoAuditar.estado === 'PENDIENTE'
-                                ? '—'
-                                : kilosReales.toFixed(3)}
+                              {pedidoAuditar.estado === 'PENDIENTE' ? (
+                                '—'
+                              ) : (
+                                <>
+                                  {kilosReales.toFixed(3)}
+                                  {esUnidad && (
+                                    <span className="block text-[10px] text-purple-800">
+                                      {(kilosReales / pesoUnidad).toFixed(1)}{' '}
+                                      unid.
+                                    </span>
+                                  )}
+                                </>
+                              )}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">
                               {esCort

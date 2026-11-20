@@ -2,10 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * Cliente administrativo de Supabase (Service Role) para operaciones
- * privilegiadas exclusivamente en el servidor (ej. creación de cuentas desde Administración).
+ * privilegiadas exclusivamente en el servidor (ej. resolución de perfil tras login,
+ * vinculación de `auth_id` y administración de cuentas).
  * NUNCA importar ni exponer en componentes cliente.
  */
-export function createAdminClient() {
+export function createSupabaseAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -23,3 +24,5 @@ export function createAdminClient() {
   });
 }
 
+/** Alias retrocompatible para módulos servidores existentes. */
+export const createAdminClient = createSupabaseAdminClient;

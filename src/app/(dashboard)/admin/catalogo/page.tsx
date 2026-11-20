@@ -14,6 +14,8 @@ import { createClient } from '@/lib/supabase/server';
 import type {
   FormatoProductoEnum,
   RolUsuarioEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
 } from '@/types/database.types';
 
 interface ProductoQueryRaw {
@@ -21,7 +23,11 @@ interface ProductoQueryRaw {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida?: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos?: number;
   precio_kilo_bs: number;
+  costo_unitario_bs?: number;
+  stock_minimo_alerta?: number;
   stock_fisico_kilos: number;
   stock_disponible_kilos: number | null;
   activo: boolean;
@@ -32,6 +38,7 @@ interface UsuarioQueryRaw {
   nombre_completo: string;
   username: string;
   telefono: string | null;
+  codigo_empleado_sac?: string | null;
   rol: RolUsuarioEnum;
   activo: boolean;
   requiere_cambio_clave?: boolean;
@@ -48,9 +55,17 @@ interface ClienteQueryRaw {
   id_cliente: number;
   codigo_cliente_sac: string;
   nombre_comercial: string;
+  razon_social?: string | null;
   nit_ci: string | null;
   telefono: string | null;
+  direccion?: string | null;
   id_zona: number;
+  localidad?: string | null;
+  forma_pago_habitual?: TipoVenta;
+  plazo_dias?: number;
+  limite_credito_bs?: number;
+  regla_cortesia_habitual?: string | null;
+  observaciones?: string | null;
   activo: boolean;
 }
 
@@ -67,14 +82,13 @@ async function AdminCatalogoContent() {
       supabase
         .from('productos')
         .select(
-          'id_producto, codigo_sku, nombre_producto, formato, precio_kilo_bs, stock_fisico_kilos, stock_disponible_kilos, activo'
+          'id_producto, codigo_sku, nombre_producto, formato, unidad_medida, peso_unidad_kilos, precio_kilo_bs, costo_unitario_bs, stock_minimo_alerta, stock_fisico_kilos, stock_disponible_kilos, activo'
         )
-        .in('formato', ['GRANEL', 'VACIO'])
         .order('id_producto', { ascending: true }),
       supabase
         .from('usuarios')
         .select(
-          'id_usuario, nombre_completo, username, telefono, rol, activo, requiere_cambio_clave'
+          'id_usuario, nombre_completo, username, telefono, codigo_empleado_sac, rol, activo, requiere_cambio_clave'
         )
         .order('id_usuario', { ascending: true }),
       supabase
@@ -84,7 +98,7 @@ async function AdminCatalogoContent() {
       supabase
         .from('clientes')
         .select(
-          'id_cliente, codigo_cliente_sac, nombre_comercial, nit_ci, telefono, id_zona, activo'
+          'id_cliente, codigo_cliente_sac, nombre_comercial, razon_social, nit_ci, telefono, direccion, id_zona, localidad, forma_pago_habitual, plazo_dias, limite_credito_bs, regla_cortesia_habitual, observaciones, activo'
         )
         .order('id_cliente', { ascending: false }),
     ]);
@@ -137,6 +151,10 @@ async function AdminCatalogoContent() {
     nombre_producto: p.nombre_producto,
     formato: p.formato === 'VACIO' ? 'VACIO' : 'GRANEL',
     precio_kilo_bs: Number(p.precio_kilo_bs ?? 0),
+    unidad_medida: p.unidad_medida ?? 'KILO',
+    peso_unidad_kilos: Number(p.peso_unidad_kilos ?? 1),
+    costo_unitario_bs: Number(p.costo_unitario_bs ?? 0),
+    stock_minimo_alerta: Number(p.stock_minimo_alerta ?? 10),
     stock_fisico_kilos: Number(p.stock_fisico_kilos ?? 0),
     stock_disponible_kilos: Number(p.stock_disponible_kilos ?? 0),
     activo: Boolean(p.activo),
@@ -147,6 +165,7 @@ async function AdminCatalogoContent() {
     nombre_completo: u.nombre_completo,
     username: u.username,
     telefono: u.telefono ?? '',
+    codigo_empleado_sac: u.codigo_empleado_sac ?? null,
     rol: u.rol,
     activo: Boolean(u.activo),
     requiere_cambio_clave: Boolean(u.requiere_cambio_clave),
@@ -167,9 +186,18 @@ async function AdminCatalogoContent() {
     id_cliente: c.id_cliente,
     codigo_cliente_sac: c.codigo_cliente_sac,
     nombre_comercial: c.nombre_comercial,
+    razon_social: c.razon_social ?? null,
     nit_ci: c.nit_ci ?? '',
     telefono: c.telefono ?? '',
+    direccion: c.direccion ?? null,
     id_zona: c.id_zona,
+    localidad: c.localidad ?? null,
+    forma_pago_habitual:
+      c.forma_pago_habitual === 'CREDITO' ? 'CREDITO' : 'CONTADO',
+    plazo_dias: Number(c.plazo_dias ?? 0),
+    limite_credito_bs: Number(c.limite_credito_bs ?? 0),
+    regla_cortesia_habitual: c.regla_cortesia_habitual ?? null,
+    observaciones: c.observaciones ?? null,
     activo: Boolean(c.activo),
   }));
 

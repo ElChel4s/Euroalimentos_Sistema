@@ -13,6 +13,8 @@ import { createClient } from '@/lib/supabase/server';
 import type {
   EstadoPedidoEnum,
   FormatoProductoEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
 } from '@/types/database.types';
 
 interface ImprimirTicketPageProps {
@@ -64,6 +66,8 @@ interface ProductoRelationRaw {
   codigo_sku: string;
   nombre_producto: string;
   formato: FormatoProductoEnum;
+  unidad_medida?: UnidadMedidaEnum | (string & {});
+  peso_unidad_kilos?: number;
 }
 
 interface DetallePedidoRowRaw {
@@ -81,7 +85,10 @@ interface DetallePedidoRowRaw {
 interface PedidoTicketRowRaw {
   id_pedido: number;
   nro_nota_venta: number | null;
+  nro_documento_sac: number | null;
   estado: EstadoPedidoEnum;
+  tipo_venta: TipoVenta;
+  plazo_dias: number;
   es_pedido_cortesia_pura: boolean;
   observaciones: string | null;
   fecha_preventa: string;
@@ -145,7 +152,10 @@ async function ImprimirTicketContent({
       `
       id_pedido,
       nro_nota_venta,
+      nro_documento_sac,
       estado,
+      tipo_venta,
+      plazo_dias,
       es_pedido_cortesia_pura,
       observaciones,
       fecha_preventa,
@@ -190,7 +200,9 @@ async function ImprimirTicketContent({
           id_producto,
           codigo_sku,
           nombre_producto,
-          formato
+          formato,
+          unidad_medida,
+          peso_unidad_kilos
         )
       )
     `
@@ -253,7 +265,13 @@ async function ImprimirTicketContent({
       row.nro_nota_venta !== null && row.nro_nota_venta !== undefined
         ? Number(row.nro_nota_venta)
         : null,
+    nro_documento_sac:
+      row.nro_documento_sac !== null && row.nro_documento_sac !== undefined
+        ? Number(row.nro_documento_sac)
+        : null,
     estado: row.estado,
+    tipo_venta: row.tipo_venta === 'CREDITO' ? 'CREDITO' : 'CONTADO',
+    plazo_dias: Number(row.plazo_dias ?? 0),
     es_pedido_cortesia_pura: Boolean(row.es_pedido_cortesia_pura),
     fecha_preventa: row.fecha_preventa,
     fecha_despacho: row.fecha_despacho ?? null,
@@ -290,6 +308,8 @@ async function ImprimirTicketContent({
         nombre_producto:
           prod?.nombre_producto ?? `Producto #${det.id_producto}`,
         formato: prod?.formato ?? 'GRANEL',
+        unidad_medida: prod?.unidad_medida ?? 'KILO',
+        peso_unidad_kilos: Number(prod?.peso_unidad_kilos ?? 1),
         kilos_estimados: Number(det.kilos_estimados ?? 0),
         kilos_reales:
           det.kilos_reales !== null && det.kilos_reales !== undefined

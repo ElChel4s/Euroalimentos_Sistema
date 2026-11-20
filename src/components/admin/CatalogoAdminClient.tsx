@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   Ban,
+  Banknote,
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
+  Gift,
   KeyRound,
   Loader2,
   MapPin,
@@ -35,7 +38,11 @@ import {
   type UsuarioSistemaAdminRow,
   type ZonaMercadoAdminRow,
 } from '@/actions/admin.actions';
-import type { RolUsuarioEnum } from '@/types/database.types';
+import type {
+  RolUsuarioEnum,
+  TipoVenta,
+  UnidadMedidaEnum,
+} from '@/types/database.types';
 
 export type FiltroEstado = 'TODOS' | 'ACTIVOS' | 'INACTIVOS';
 
@@ -141,7 +148,7 @@ function PaginationBar({
         <span className="text-slate-300">|</span>
         <span className="text-slate-500">Por página:</span>
         <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
-          {[10, 20, 50].map((size) => (
+          {[15, 30, 50].map((size) => (
             <button
               key={size}
               type="button"
@@ -230,7 +237,7 @@ export function CatalogoAdminClient({
   const [filtroEstadoProd, setFiltroEstadoProd] =
     useState<FiltroEstado>('TODOS');
   const [pageProd, setPageProd] = useState(1);
-  const [pageSizeProd, setPageSizeProd] = useState(10);
+  const [pageSizeProd, setPageSizeProd] = useState(15);
 
   const [precioInlineId, setPrecioInlineId] = useState<number | null>(null);
   const [precioInlineValor, setPrecioInlineValor] = useState<string>('');
@@ -242,13 +249,21 @@ export function CatalogoAdminClient({
     codigo_sku: string;
     nombre_producto: string;
     formato: FormatoChorizoInput;
+    unidad_medida: UnidadMedidaEnum;
+    peso_unidad_kilos: string;
+    costo_unitario_bs: string;
     precio_kilo_bs: string;
+    stock_minimo_alerta: string;
     activo: boolean;
   }>({
     codigo_sku: '',
     nombre_producto: '',
     formato: 'GRANEL',
+    unidad_medida: 'KILO',
+    peso_unidad_kilos: '1.000',
+    costo_unitario_bs: '0.00',
     precio_kilo_bs: '',
+    stock_minimo_alerta: '10.000',
     activo: true,
   });
 
@@ -262,12 +277,13 @@ export function CatalogoAdminClient({
   const [filtroEstadoUsr, setFiltroEstadoUsr] =
     useState<FiltroEstado>('TODOS');
   const [pageUsr, setPageUsr] = useState(1);
-  const [pageSizeUsr, setPageSizeUsr] = useState(10);
+  const [pageSizeUsr, setPageSizeUsr] = useState(15);
 
   const [modalUsrAbierto, setModalUsrAbierto] = useState(false);
   const [usrEditando, setUsrEditando] =
     useState<UsuarioSistemaAdminRow | null>(null);
   const [formUsr, setFormUsr] = useState<{
+    codigo_empleado_sac: string;
     nombre_completo: string;
     username: string;
     password: string;
@@ -275,6 +291,7 @@ export function CatalogoAdminClient({
     rol: RolUsuarioEnum;
     activo: boolean;
   }>({
+    codigo_empleado_sac: '',
     nombre_completo: '',
     username: '',
     password: '',
@@ -287,14 +304,17 @@ export function CatalogoAdminClient({
     useState<UsuarioSistemaAdminRow | null>(null);
 
   // ==========================================================================
-  // PESTAÑA 3: CLIENTES Y ZONAS SAC
+  // PESTAÑA 3: CLIENTES Y ZONAS SAC (352 REGISTROS)
   // ==========================================================================
   const [busquedaCli, setBusquedaCli] = useState('');
   const [filtroZonaCli, setFiltroZonaCli] = useState<string>('TODAS');
+  const [filtroPagoCli, setFiltroPagoCli] = useState<'TODOS' | TipoVenta>(
+    'TODOS'
+  );
   const [filtroEstadoCli, setFiltroEstadoCli] =
     useState<FiltroEstado>('TODOS');
   const [pageCli, setPageCli] = useState(1);
-  const [pageSizeCli, setPageSizeCli] = useState(10);
+  const [pageSizeCli, setPageSizeCli] = useState(15);
 
   const [modalCliAbierto, setModalCliAbierto] = useState(false);
   const [cliEditando, setCliEditando] = useState<ClienteSacAdminRow | null>(
@@ -303,16 +323,32 @@ export function CatalogoAdminClient({
   const [formCli, setFormCli] = useState<{
     codigo_cliente_sac: string;
     nombre_comercial: string;
+    razon_social: string;
     nit_ci: string;
     telefono: string;
+    direccion: string;
+    localidad: string;
     id_zona: number;
+    forma_pago_habitual: TipoVenta;
+    plazo_dias: string;
+    limite_credito_bs: string;
+    regla_cortesia_habitual: string;
+    observaciones: string;
     activo: boolean;
   }>({
     codigo_cliente_sac: '',
     nombre_comercial: '',
+    razon_social: '',
     nit_ci: '',
     telefono: '',
+    direccion: '',
+    localidad: '',
     id_zona: zonas[0]?.id_zona ?? 0,
+    forma_pago_habitual: 'CONTADO',
+    plazo_dias: '0',
+    limite_credito_bs: '0.00',
+    regla_cortesia_habitual: '',
+    observaciones: '',
     activo: true,
   });
 
@@ -361,6 +397,7 @@ export function CatalogoAdminClient({
         !q ||
         u.nombre_completo.toLowerCase().includes(q) ||
         u.username.toLowerCase().includes(q) ||
+        (u.codigo_empleado_sac ?? '').toLowerCase().includes(q) ||
         u.telefono.toLowerCase().includes(q);
       const matchRol = filtroRolUsr === 'TODOS' || u.rol === filtroRolUsr;
       const matchEst =
@@ -387,18 +424,24 @@ export function CatalogoAdminClient({
       const matchTexto =
         !q ||
         c.nombre_comercial.toLowerCase().includes(q) ||
+        (c.razon_social ?? '').toLowerCase().includes(q) ||
         c.codigo_cliente_sac.toLowerCase().includes(q) ||
+        (c.localidad ?? '').toLowerCase().includes(q) ||
         c.nit_ci.toLowerCase().includes(q) ||
         c.telefono.toLowerCase().includes(q);
       const matchZona =
         filtroZonaCli === 'TODAS' || String(c.id_zona) === filtroZonaCli;
+      const formaPago =
+        c.forma_pago_habitual === 'CREDITO' ? 'CREDITO' : 'CONTADO';
+      const matchPago =
+        filtroPagoCli === 'TODOS' || formaPago === filtroPagoCli;
       const matchEst =
         filtroEstadoCli === 'TODOS' ||
         (filtroEstadoCli === 'ACTIVOS' && c.activo) ||
         (filtroEstadoCli === 'INACTIVOS' && !c.activo);
-      return matchTexto && matchZona && matchEst;
+      return matchTexto && matchZona && matchPago && matchEst;
     });
-  }, [clientes, busquedaCli, filtroZonaCli, filtroEstadoCli]);
+  }, [clientes, busquedaCli, filtroZonaCli, filtroPagoCli, filtroEstadoCli]);
 
   const clientesPaginados = useMemo(() => {
     const totalPages = Math.max(
@@ -419,7 +462,11 @@ export function CatalogoAdminClient({
       codigo_sku: '',
       nombre_producto: '',
       formato: 'GRANEL',
+      unidad_medida: 'KILO',
+      peso_unidad_kilos: '1.000',
+      costo_unitario_bs: '0.00',
       precio_kilo_bs: '',
+      stock_minimo_alerta: '10.000',
       activo: true,
     });
     setModalProdAbierto(true);
@@ -431,7 +478,14 @@ export function CatalogoAdminClient({
       codigo_sku: prod.codigo_sku,
       nombre_producto: prod.nombre_producto,
       formato: prod.formato,
+      unidad_medida:
+        String(prod.unidad_medida ?? 'KILO').toUpperCase() === 'UNIDAD'
+          ? 'UNIDAD'
+          : 'KILO',
+      peso_unidad_kilos: (prod.peso_unidad_kilos ?? 1).toFixed(3),
+      costo_unitario_bs: Number(prod.costo_unitario_bs ?? 0).toString(),
       precio_kilo_bs: prod.precio_kilo_bs.toFixed(2),
+      stock_minimo_alerta: (prod.stock_minimo_alerta ?? 10).toFixed(3),
       activo: prod.activo,
     });
     setModalProdAbierto(true);
@@ -440,6 +494,10 @@ export function CatalogoAdminClient({
   const guardarChorizoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const precioNum = parseFloat(formProd.precio_kilo_bs);
+    const pesoUnidadNum = parseFloat(formProd.peso_unidad_kilos);
+    const costoNum = parseFloat(formProd.costo_unitario_bs || '0');
+    const stockMinNum = parseFloat(formProd.stock_minimo_alerta || '0');
+
     if (
       !formProd.codigo_sku.trim() ||
       !formProd.nombre_producto.trim() ||
@@ -453,6 +511,21 @@ export function CatalogoAdminClient({
       return;
     }
 
+    if (Number.isNaN(pesoUnidadNum) || pesoUnidadNum <= 0) {
+      notificar('El peso por unidad debe ser mayor a 0.000 kg.', 'warn');
+      return;
+    }
+
+    if (Number.isNaN(costoNum) || costoNum < 0) {
+      notificar('El costo unitario en Bs. no puede ser negativo.', 'warn');
+      return;
+    }
+
+    if (Number.isNaN(stockMinNum) || stockMinNum < 0) {
+      notificar('El stock mínimo de alerta no puede ser negativo.', 'warn');
+      return;
+    }
+
     setGuardandoGlobal(true);
     try {
       const res = await guardarProductoAction({
@@ -460,7 +533,11 @@ export function CatalogoAdminClient({
         codigo_sku: formProd.codigo_sku.trim().toUpperCase(),
         nombre_producto: formProd.nombre_producto.trim(),
         formato: formProd.formato,
+        unidad_medida: formProd.unidad_medida,
+        peso_unidad_kilos: Number(pesoUnidadNum.toFixed(3)),
+        costo_unitario_bs: Number(costoNum.toFixed(5)),
         precio_kilo_bs: Number(precioNum.toFixed(2)),
+        stock_minimo_alerta: Number(stockMinNum.toFixed(3)),
         activo: formProd.activo,
       });
 
@@ -545,6 +622,7 @@ export function CatalogoAdminClient({
   const abrirModalNuevoUsuario = () => {
     setUsrEditando(null);
     setFormUsr({
+      codigo_empleado_sac: '',
       nombre_completo: '',
       username: '',
       password: '',
@@ -558,6 +636,7 @@ export function CatalogoAdminClient({
   const abrirModalEditarUsuario = (u: UsuarioSistemaAdminRow) => {
     setUsrEditando(u);
     setFormUsr({
+      codigo_empleado_sac: u.codigo_empleado_sac ?? '',
       nombre_completo: u.nombre_completo,
       username: u.username,
       password: '',
@@ -594,6 +673,8 @@ export function CatalogoAdminClient({
     try {
       const res = await guardarUsuarioAction({
         id_usuario: usrEditando?.id_usuario,
+        codigo_empleado_sac:
+          formUsr.codigo_empleado_sac.trim().toUpperCase() || null,
         nombre_completo: formUsr.nombre_completo.trim(),
         username: usernameLimpio,
         telefono: formUsr.telefono.trim(),
@@ -694,31 +775,40 @@ export function CatalogoAdminClient({
   // ==========================================================================
   // HANDLERS CLIENTES Y ZONAS
   // ==========================================================================
-  const sugerirCodigoSAC = () => {
+  const calcularSiguienteCodigoSac = () => {
     const maxNum = clientes.reduce((acc, c) => {
       const match = c.codigo_cliente_sac.match(/(\d+)$/);
       const num = match ? parseInt(match[1], 10) : 0;
       return num > acc ? num : acc;
     }, 0);
-    const nextCode = `CLI-SAC-${String(maxNum + 1).padStart(3, '0')}`;
-    setFormCli((prev) => ({ ...prev, codigo_cliente_sac: nextCode }));
+    return `CL-${String(maxNum + 1).padStart(5, '0')}`;
+  };
+
+  const sugerirCodigoSAC = () => {
+    setFormCli((prev) => ({
+      ...prev,
+      codigo_cliente_sac: calcularSiguienteCodigoSac(),
+    }));
   };
 
   const abrirModalNuevoCliente = () => {
     setCliEditando(null);
     const zonaActivaDefault =
       zonas.find((z) => z.activo)?.id_zona ?? zonas[0]?.id_zona ?? 0;
-    const maxNum = clientes.reduce((acc, c) => {
-      const match = c.codigo_cliente_sac.match(/(\d+)$/);
-      const num = match ? parseInt(match[1], 10) : 0;
-      return num > acc ? num : acc;
-    }, 0);
     setFormCli({
-      codigo_cliente_sac: `CLI-SAC-${String(maxNum + 1).padStart(3, '0')}`,
+      codigo_cliente_sac: calcularSiguienteCodigoSac(),
       nombre_comercial: '',
+      razon_social: '',
       nit_ci: '',
       telefono: '',
+      direccion: '',
+      localidad: '',
       id_zona: zonaActivaDefault,
+      forma_pago_habitual: 'CONTADO',
+      plazo_dias: '0',
+      limite_credito_bs: '0.00',
+      regla_cortesia_habitual: '',
+      observaciones: '',
       activo: true,
     });
     setModalCliAbierto(true);
@@ -729,9 +819,18 @@ export function CatalogoAdminClient({
     setFormCli({
       codigo_cliente_sac: cli.codigo_cliente_sac,
       nombre_comercial: cli.nombre_comercial,
+      razon_social: cli.razon_social ?? '',
       nit_ci: cli.nit_ci,
       telefono: cli.telefono,
+      direccion: cli.direccion ?? '',
+      localidad: cli.localidad ?? '',
       id_zona: cli.id_zona,
+      forma_pago_habitual:
+        cli.forma_pago_habitual === 'CREDITO' ? 'CREDITO' : 'CONTADO',
+      plazo_dias: String(cli.plazo_dias ?? 0),
+      limite_credito_bs: Number(cli.limite_credito_bs ?? 0).toFixed(2),
+      regla_cortesia_habitual: cli.regla_cortesia_habitual ?? '',
+      observaciones: cli.observaciones ?? '',
       activo: cli.activo,
     });
     setModalCliAbierto(true);
@@ -747,15 +846,36 @@ export function CatalogoAdminClient({
       return;
     }
 
+    const plazoNum = parseInt(formCli.plazo_dias || '0', 10);
+    const limiteNum = parseFloat(formCli.limite_credito_bs || '0');
+
     setGuardandoGlobal(true);
     try {
       const res = await guardarClienteAction({
         id_cliente: cliEditando?.id_cliente,
         codigo_cliente_sac: formCli.codigo_cliente_sac.trim().toUpperCase(),
         nombre_comercial: formCli.nombre_comercial.trim(),
+        razon_social:
+          formCli.razon_social.trim() || formCli.nombre_comercial.trim(),
         nit_ci: formCli.nit_ci.trim(),
         telefono: formCli.telefono.trim(),
+        direccion: formCli.direccion.trim() || null,
+        localidad: formCli.localidad.trim() || null,
         id_zona: formCli.id_zona,
+        forma_pago_habitual: formCli.forma_pago_habitual,
+        plazo_dias:
+          formCli.forma_pago_habitual === 'CONTADO'
+            ? 0
+            : Number.isNaN(plazoNum) || plazoNum < 0
+              ? 0
+              : plazoNum,
+        limite_credito_bs:
+          Number.isNaN(limiteNum) || limiteNum < 0
+            ? 0
+            : Number(limiteNum.toFixed(2)),
+        regla_cortesia_habitual:
+          formCli.regla_cortesia_habitual.trim() || null,
+        observaciones: formCli.observaciones.trim() || null,
         activo: formCli.activo,
       });
 
@@ -1113,11 +1233,12 @@ export function CatalogoAdminClient({
               <thead>
                 <tr className="border-b-2 border-slate-200 bg-slate-100/80 font-mono text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
                   <th className="px-4 py-3.5">SKU</th>
-                  <th className="px-4 py-3.5">Variedad de Chorizo</th>
+                  <th className="px-4 py-3.5">Variedad / Medida</th>
                   <th className="px-4 py-3.5">Presentación</th>
+                  <th className="px-4 py-3.5 text-right">Costo Unit. (Bs.)</th>
                   <th className="px-4 py-3.5 text-right">Precio / Kg (Bs.)</th>
                   <th className="px-4 py-3.5 text-right">
-                    Stock Cámara (Físico)
+                    Stock Cámara / Mín.
                   </th>
                   <th className="px-4 py-3.5 text-right">Estado y Acción</th>
                 </tr>
@@ -1126,7 +1247,7 @@ export function CatalogoAdminClient({
                 {productosPaginados.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-4 py-10 text-center text-sm font-medium text-slate-500"
                     >
                       No se encontraron variedades de chorizo con los filtros
@@ -1136,6 +1257,13 @@ export function CatalogoAdminClient({
                 ) : (
                   productosPaginados.map((prod) => {
                     const sinDisponible = prod.stock_disponible_kilos <= 0;
+                    const esPorUnidad =
+                      String(prod.unidad_medida ?? 'KILO').toUpperCase() ===
+                      'UNIDAD';
+                    const pesoUnidad = Number(prod.peso_unidad_kilos ?? 1);
+                    const costoUnit = Number(prod.costo_unitario_bs ?? 0);
+                    const stockMin = Number(prod.stock_minimo_alerta ?? 10);
+                    const bajoMinimo = prod.stock_fisico_kilos <= stockMin;
                     return (
                       <tr
                         key={prod.id_producto}
@@ -1153,6 +1281,20 @@ export function CatalogoAdminClient({
                           <div className="font-bold text-slate-900">
                             {prod.nombre_producto}
                           </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
+                            <span
+                              className={`rounded border px-1.5 py-0.5 font-bold ${
+                                esPorUnidad
+                                  ? 'border-purple-300 bg-purple-50 text-purple-900'
+                                  : 'border-slate-200 bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {esPorUnidad ? 'UNIDAD' : 'KILO'}
+                            </span>
+                            <span className="tabular-nums text-slate-500">
+                              Peso unid.: {pesoUnidad.toFixed(3)} kg
+                            </span>
+                          </div>
                         </td>
 
                         <td className="px-4 py-3.5 align-middle">
@@ -1165,6 +1307,10 @@ export function CatalogoAdminClient({
                           >
                             {prod.formato}
                           </span>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-right align-middle font-mono text-xs font-bold tabular-nums text-slate-700">
+                          Bs. {costoUnit.toFixed(2)}
                         </td>
 
                         <td className="px-4 py-3.5 text-right align-middle">
@@ -1216,15 +1362,24 @@ export function CatalogoAdminClient({
                         </td>
 
                         <td className="px-4 py-3.5 text-right align-middle">
-                          <div className="inline-flex items-center justify-end gap-2">
-                            <span className="font-mono text-sm font-bold tabular-nums text-slate-900">
-                              {prod.stock_fisico_kilos.toFixed(3)} Kg
-                            </span>
-                            {sinDisponible && (
-                              <span className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-100 px-2 py-0.5 font-mono text-[10px] font-extrabold text-[#C8102E]">
-                                <Ban className="h-3 w-3" /> SIN DISP.
+                          <div className="inline-flex flex-col items-end gap-0.5">
+                            <div className="inline-flex items-center justify-end gap-2">
+                              <span
+                                className={`font-mono text-sm font-bold tabular-nums ${
+                                  bajoMinimo ? 'text-amber-700' : 'text-slate-900'
+                                }`}
+                              >
+                                {prod.stock_fisico_kilos.toFixed(3)} Kg
                               </span>
-                            )}
+                              {sinDisponible && (
+                                <span className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-100 px-2 py-0.5 font-mono text-[10px] font-extrabold text-[#C8102E]">
+                                  <Ban className="h-3 w-3" /> SIN DISP.
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono text-[11px] tabular-nums text-slate-500">
+                              Alerta mín.: {stockMin.toFixed(3)} Kg
+                            </span>
                           </div>
                         </td>
 
@@ -1292,21 +1447,49 @@ export function CatalogoAdminClient({
                     <h3 className="mt-2 text-sm font-extrabold leading-snug text-slate-900">
                       {prod.nombre_producto}
                     </h3>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
+                      <span
+                        className={`rounded border px-1.5 py-0.5 font-bold ${
+                          String(prod.unidad_medida ?? 'KILO').toUpperCase() ===
+                          'UNIDAD'
+                            ? 'border-purple-300 bg-purple-50 text-purple-900'
+                            : 'border-slate-200 bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {String(prod.unidad_medida ?? 'KILO').toUpperCase()}
+                      </span>
+                      <span className="text-slate-500">
+                        Peso: {Number(prod.peso_unidad_kilos ?? 1).toFixed(3)}{' '}
+                        kg
+                      </span>
+                      <span className="text-slate-500">
+                        • Mín.:{' '}
+                        {Number(prod.stock_minimo_alerta ?? 10).toFixed(1)} kg
+                      </span>
+                    </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                      <div>
+                        <span className="block font-mono text-[10px] font-bold uppercase text-slate-500">
+                          Costo Unit.
+                        </span>
+                        <span className="font-mono text-xs font-extrabold tabular-nums text-slate-800">
+                          Bs. {Number(prod.costo_unitario_bs ?? 0).toFixed(2)}
+                        </span>
+                      </div>
                       <div>
                         <span className="block font-mono text-[10px] font-bold uppercase text-slate-500">
                           Precio / Kg
                         </span>
-                        <span className="font-mono text-base font-extrabold tabular-nums text-[#C8102E]">
+                        <span className="font-mono text-sm font-extrabold tabular-nums text-[#C8102E]">
                           Bs. {prod.precio_kilo_bs.toFixed(2)}
                         </span>
                       </div>
                       <div className="text-right">
                         <span className="block font-mono text-[10px] font-bold uppercase text-slate-500">
-                          Stock Físico Cámara
+                          Stock Físico
                         </span>
-                        <span className="font-mono text-sm font-bold tabular-nums text-slate-900">
+                        <span className="font-mono text-xs font-bold tabular-nums text-slate-900">
                           {prod.stock_fisico_kilos.toFixed(3)} Kg
                         </span>
                         {sinDisponible && (
@@ -1464,8 +1647,15 @@ export function CatalogoAdminClient({
                         }`}
                       >
                         <td className="px-4 py-3.5 align-middle">
-                          <div className="font-bold text-slate-900">
-                            {u.nombre_completo}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {u.codigo_empleado_sac && (
+                              <span className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-extrabold text-slate-800">
+                                {u.codigo_empleado_sac}
+                              </span>
+                            )}
+                            <span className="font-bold text-slate-900">
+                              {u.nombre_completo}
+                            </span>
                           </div>
                           <div className="mt-0.5 font-mono text-xs tabular-nums text-slate-500">
                             Tel: {u.telefono || '—'}
@@ -1570,8 +1760,13 @@ export function CatalogoAdminClient({
                     />
                   </div>
 
-                  <h3 className="mt-2 text-sm font-extrabold text-slate-900">
-                    {u.nombre_completo}
+                  <h3 className="mt-2 flex flex-wrap items-center gap-1.5 text-sm font-extrabold text-slate-900">
+                    {u.codigo_empleado_sac && (
+                      <span className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-extrabold text-slate-800">
+                        {u.codigo_empleado_sac}
+                      </span>
+                    )}
+                    <span>{u.nombre_completo}</span>
                   </h3>
                   <p className="text-xs text-slate-500">{rolMeta.funcion}</p>
 
@@ -1651,7 +1846,7 @@ export function CatalogoAdminClient({
                     setBusquedaCli(e.target.value);
                     setPageCli(1);
                   }}
-                  placeholder="Buscar por comercio, CLI-SAC, NIT/CI o teléfono..."
+                  placeholder="Buscar por código CL-, comercio, razón social, localidad o NIT/CI..."
                   className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 pr-4 pl-10 text-base text-slate-900 shadow-inner transition focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
                 />
               </div>
@@ -1689,38 +1884,60 @@ export function CatalogoAdminClient({
             </div>
 
             <div className="flex flex-col gap-2 pt-1 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFiltroZonaCli('TODAS');
-                    setPageCli(1);
-                  }}
-                  className={`min-h-[44px] shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-xs font-bold transition ${
-                    filtroZonaCli === 'TODAS'
-                      ? 'border-slate-900 bg-slate-900 text-[#FFCD00]'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  Todas las Zonas ({zonas.length})
-                </button>
-                {zonas.map((z) => (
-                  <button
-                    key={z.id_zona}
-                    type="button"
-                    onClick={() => {
-                      setFiltroZonaCli(String(z.id_zona));
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[220px]">
+                  <MapPin className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <select
+                    aria-label="Filtrar clientes por zona de mercado"
+                    value={filtroZonaCli}
+                    onChange={(e) => {
+                      setFiltroZonaCli(e.target.value);
                       setPageCli(1);
                     }}
-                    className={`min-h-[44px] shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-xs font-bold transition ${
-                      filtroZonaCli === String(z.id_zona)
-                        ? 'border-slate-900 bg-slate-900 text-[#FFCD00]'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
-                    }`}
+                    className="min-h-[42px] w-full rounded-xl border border-slate-300 bg-white pr-3 pl-9 text-xs font-bold text-slate-800 focus:border-[#C8102E] focus:outline-none"
                   >
-                    {z.nombre_zona} ({z.ciudad})
-                  </button>
-                ))}
+                    <option value="TODAS">
+                      Todas las Zonas ({zonas.length})
+                    </option>
+                    {zonas.map((z) => (
+                      <option key={z.id_zona} value={String(z.id_zona)}>
+                        {z.nombre_zona} ({z.ciudad})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {(
+                    [
+                      { id: 'TODOS', label: 'Pago: Todos' },
+                      { id: 'CONTADO', label: 'CONTADO' },
+                      { id: 'CREDITO', label: 'CRÉDITO' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setFiltroPagoCli(opt.id);
+                        setPageCli(1);
+                      }}
+                      className={`inline-flex min-h-[42px] items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ${
+                        filtroPagoCli === opt.id
+                          ? 'border-[#C8102E] bg-[#C8102E] text-white'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {opt.id === 'CONTADO' && (
+                        <Banknote className="h-3.5 w-3.5" />
+                      )}
+                      {opt.id === 'CREDITO' && (
+                        <CreditCard className="h-3.5 w-3.5" />
+                      )}
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1753,11 +1970,10 @@ export function CatalogoAdminClient({
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b-2 border-slate-200 bg-slate-100/80 font-mono text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
-                  <th className="px-4 py-3.5">Cód. Cliente SAC</th>
-                  <th className="px-4 py-3.5">Cliente / Comercio</th>
-                  <th className="px-4 py-3.5">NIT / CI</th>
-                  <th className="px-4 py-3.5">Teléfono</th>
-                  <th className="px-4 py-3.5">Zona / Mercado</th>
+                  <th className="px-4 py-3.5">Cód. SAC</th>
+                  <th className="px-4 py-3.5">Cliente / Condición</th>
+                  <th className="px-4 py-3.5">NIT / CI • Tel.</th>
+                  <th className="px-4 py-3.5">Zona / Localidad</th>
                   <th className="px-4 py-3.5 text-right">Estado y Acción</th>
                 </tr>
               </thead>
@@ -1765,7 +1981,7 @@ export function CatalogoAdminClient({
                 {clientesPaginados.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="px-4 py-10 text-center text-sm font-medium text-slate-500"
                     >
                       No se encontraron clientes SAC con los filtros aplicados.
@@ -1774,6 +1990,10 @@ export function CatalogoAdminClient({
                 ) : (
                   clientesPaginados.map((cli) => {
                     const zona = getZonaCliente(cli.id_zona);
+                    const esCredito = cli.forma_pago_habitual === 'CREDITO';
+                    const tieneCortesia = Boolean(
+                      cli.regla_cortesia_habitual?.trim()
+                    );
                     return (
                       <tr
                         key={cli.id_cliente}
@@ -1791,18 +2011,44 @@ export function CatalogoAdminClient({
                           <div className="font-bold text-slate-900">
                             {cli.nombre_comercial}
                           </div>
+                          {cli.razon_social &&
+                            cli.razon_social.trim().toUpperCase() !==
+                              cli.nombre_comercial.trim().toUpperCase() && (
+                              <div className="text-xs text-slate-500">
+                                {cli.razon_social}
+                              </div>
+                            )}
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {esCredito ? (
+                              <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-amber-950">
+                                <CreditCard className="h-3 w-3" />
+                                CRÉDITO • {cli.plazo_dias ?? 0}d
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-emerald-950">
+                                <Banknote className="h-3 w-3" />
+                                CONTADO
+                              </span>
+                            )}
+                            {tieneCortesia && (
+                              <span
+                                title={cli.regla_cortesia_habitual ?? ''}
+                                className="inline-flex items-center gap-1 rounded border border-amber-400 bg-[#FFCD00]/40 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-slate-950"
+                              >
+                                <Gift className="h-3 w-3 text-[#C8102E]" />
+                                Cortesía habitual
+                              </span>
+                            )}
+                          </div>
                         </td>
 
-                        <td className="px-4 py-3.5 align-middle">
-                          <span className="font-mono text-xs font-semibold tabular-nums text-slate-800">
-                            {cli.nit_ci || '—'}
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-3.5 align-middle">
-                          <span className="font-mono text-xs font-semibold tabular-nums text-slate-800">
-                            {cli.telefono || '—'}
-                          </span>
+                        <td className="px-4 py-3.5 align-middle font-mono text-xs tabular-nums">
+                          <div className="font-semibold text-slate-800">
+                            NIT: {cli.nit_ci || '—'}
+                          </div>
+                          <div className="text-slate-500">
+                            Tel: {cli.telefono || '—'}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3.5 align-middle">
@@ -1810,7 +2056,7 @@ export function CatalogoAdminClient({
                             {zona?.nombre_zona || 'Sin zona'}
                           </div>
                           <div className="font-mono text-[11px] font-bold uppercase text-slate-500">
-                            {zona?.ciudad || 'Bolivia'}
+                            {cli.localidad || zona?.ciudad || 'Bolivia'}
                           </div>
                         </td>
 
@@ -1861,6 +2107,32 @@ export function CatalogoAdminClient({
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900">
                     {cli.nombre_comercial}
                   </h3>
+                  {cli.razon_social &&
+                    cli.razon_social.trim().toUpperCase() !==
+                      cli.nombre_comercial.trim().toUpperCase() && (
+                      <p className="text-xs text-slate-500">
+                        {cli.razon_social}
+                      </p>
+                    )}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {cli.forma_pago_habitual === 'CREDITO' ? (
+                      <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-amber-950">
+                        <CreditCard className="h-3 w-3" />
+                        CRÉDITO • {cli.plazo_dias ?? 0}d
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-emerald-950">
+                        <Banknote className="h-3 w-3" />
+                        CONTADO
+                      </span>
+                    )}
+                    {cli.regla_cortesia_habitual?.trim() && (
+                      <span className="inline-flex items-center gap-1 rounded border border-amber-400 bg-[#FFCD00]/40 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-slate-950">
+                        <Gift className="h-3 w-3 text-[#C8102E]" />
+                        Cortesía habitual
+                      </span>
+                    )}
+                  </div>
 
                   <div className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs">
                     <div className="flex justify-between font-mono tabular-nums">
@@ -1876,11 +2148,11 @@ export function CatalogoAdminClient({
                       </span>
                     </div>
                     <div className="flex justify-between border-t border-slate-200 pt-1">
-                      <span className="text-slate-500">Zona SAC:</span>
+                      <span className="text-slate-500">Zona / Localidad:</span>
                       <span className="text-right font-bold text-slate-800">
                         {zona
-                          ? `${zona.nombre_zona} (${zona.ciudad})`
-                          : 'Sin zona'}
+                          ? `${zona.nombre_zona} (${cli.localidad || zona.ciudad})`
+                          : cli.localidad || 'Sin zona'}
                       </span>
                     </div>
                   </div>
@@ -2031,6 +2303,107 @@ export function CatalogoAdminClient({
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Unidad de Medida *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['KILO', 'UNIDAD'] as const).map((um) => (
+                      <button
+                        key={um}
+                        type="button"
+                        onClick={() =>
+                          setFormProd({
+                            ...formProd,
+                            unidad_medida: um,
+                            peso_unidad_kilos:
+                              um === 'KILO'
+                                ? '1.000'
+                                : formProd.peso_unidad_kilos === '1.000'
+                                  ? '0.500'
+                                  : formProd.peso_unidad_kilos,
+                          })
+                        }
+                        className={`min-h-[48px] rounded-xl border-2 font-mono text-xs font-extrabold transition ${
+                          formProd.unidad_medida === um
+                            ? 'border-[#C8102E] bg-red-50 text-[#C8102E]'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {um}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Peso / Unidad (Kg) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    inputMode="decimal"
+                    required
+                    value={formProd.peso_unidad_kilos}
+                    onChange={(e) =>
+                      setFormProd({
+                        ...formProd,
+                        peso_unidad_kilos: e.target.value,
+                      })
+                    }
+                    placeholder="0.500"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-base font-bold tabular-nums text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Costo Unitario (Bs.)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.00001"
+                    min="0"
+                    inputMode="decimal"
+                    value={formProd.costo_unitario_bs}
+                    onChange={(e) =>
+                      setFormProd({
+                        ...formProd,
+                        costo_unitario_bs: e.target.value,
+                      })
+                    }
+                    placeholder="25.00"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-base font-bold tabular-nums text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Stock Mínimo Alerta (Kg)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    inputMode="decimal"
+                    value={formProd.stock_minimo_alerta}
+                    onChange={(e) =>
+                      setFormProd({
+                        ...formProd,
+                        stock_minimo_alerta: e.target.value,
+                      })
+                    }
+                    placeholder="10.000"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-base font-bold tabular-nums text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div>
                   <div className="text-sm font-bold text-slate-900">
@@ -2111,20 +2484,42 @@ export function CatalogoAdminClient({
               onSubmit={guardarUsuarioSubmit}
               className="max-h-[84vh] space-y-4 overflow-y-auto p-5"
             >
-              <div>
-                <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
-                  Nombre Completo *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formUsr.nombre_completo}
-                  onChange={(e) =>
-                    setFormUsr({ ...formUsr, nombre_completo: e.target.value })
-                  }
-                  placeholder="Ej: Carlos Mendoza Quispe"
-                  className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-base font-semibold text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="sm:col-span-2">
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Nombre Completo *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formUsr.nombre_completo}
+                    onChange={(e) =>
+                      setFormUsr({
+                        ...formUsr,
+                        nombre_completo: e.target.value,
+                      })
+                    }
+                    placeholder="Ej: Carlos Mendoza Quispe"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-base font-semibold text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Cód. Empleado SAC
+                  </label>
+                  <input
+                    type="text"
+                    value={formUsr.codigo_empleado_sac}
+                    onChange={(e) =>
+                      setFormUsr({
+                        ...formUsr,
+                        codigo_empleado_sac: e.target.value.toUpperCase(),
+                      })
+                    }
+                    placeholder="EM-01"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-base font-bold uppercase text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2411,7 +2806,7 @@ export function CatalogoAdminClient({
                         codigo_cliente_sac: e.target.value.toUpperCase(),
                       })
                     }
-                    placeholder="CLI-SAC-014"
+                    placeholder="CL-00010"
                     className="min-h-[48px] flex-1 rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-base font-extrabold uppercase text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
                   />
                   <button
@@ -2424,20 +2819,40 @@ export function CatalogoAdminClient({
                 </div>
               </div>
 
-              <div>
-                <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
-                  Cliente / Nombre Comercial *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formCli.nombre_comercial}
-                  onChange={(e) =>
-                    setFormCli({ ...formCli, nombre_comercial: e.target.value })
-                  }
-                  placeholder="Ej: Fiambrería y Parrilla La Suprema"
-                  className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-base font-semibold text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Nombre Comercial *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formCli.nombre_comercial}
+                    onChange={(e) =>
+                      setFormCli({
+                        ...formCli,
+                        nombre_comercial: e.target.value,
+                      })
+                    }
+                    placeholder="Ej: Fiambrería La Suprema"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-sm font-semibold text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Razón Social
+                  </label>
+                  <input
+                    type="text"
+                    value={formCli.razon_social}
+                    onChange={(e) =>
+                      setFormCli({ ...formCli, razon_social: e.target.value })
+                    }
+                    placeholder="Razón social SAC"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-sm font-semibold text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2452,7 +2867,7 @@ export function CatalogoAdminClient({
                       setFormCli({ ...formCli, nit_ci: e.target.value })
                     }
                     placeholder="4892310014"
-                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-base tabular-nums text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-sm tabular-nums text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
                   />
                 </div>
 
@@ -2467,7 +2882,39 @@ export function CatalogoAdminClient({
                       setFormCli({ ...formCli, telefono: e.target.value })
                     }
                     placeholder="71290451"
-                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-base tabular-nums text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 font-mono text-sm tabular-nums text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Dirección
+                  </label>
+                  <input
+                    type="text"
+                    value={formCli.direccion}
+                    onChange={(e) =>
+                      setFormCli({ ...formCli, direccion: e.target.value })
+                    }
+                    placeholder="Av. / Calle / Nro."
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-sm text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Localidad
+                  </label>
+                  <input
+                    type="text"
+                    value={formCli.localidad}
+                    onChange={(e) =>
+                      setFormCli({ ...formCli, localidad: e.target.value })
+                    }
+                    placeholder="Ej: EL ALTO / CENTRO"
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-sm text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
                   />
                 </div>
               </div>
@@ -2476,34 +2923,126 @@ export function CatalogoAdminClient({
                 <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
                   Zona / Mercado *
                 </label>
-                <div className="grid grid-cols-1 gap-2">
+                <select
+                  required
+                  value={formCli.id_zona}
+                  onChange={(e) =>
+                    setFormCli({ ...formCli, id_zona: Number(e.target.value) })
+                  }
+                  className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-sm font-bold text-slate-900 focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                >
                   {zonas
                     .filter((z) => z.activo || z.id_zona === formCli.id_zona)
                     .map((z) => (
+                      <option key={z.id_zona} value={z.id_zona}>
+                        {z.nombre_zona} ({z.ciudad})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Forma de Pago *
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(['CONTADO', 'CREDITO'] as const).map((fp) => (
                       <button
-                        key={z.id_zona}
+                        key={fp}
                         type="button"
                         onClick={() =>
-                          setFormCli({ ...formCli, id_zona: z.id_zona })
+                          setFormCli({
+                            ...formCli,
+                            forma_pago_habitual: fp,
+                            plazo_dias:
+                              fp === 'CONTADO'
+                                ? '0'
+                                : formCli.plazo_dias === '0'
+                                  ? '15'
+                                  : formCli.plazo_dias,
+                          })
                         }
-                        className={`flex min-h-[46px] items-center justify-between rounded-xl border-2 px-3.5 py-2 text-left text-xs font-bold transition ${
-                          formCli.id_zona === z.id_zona
-                            ? 'border-[#C8102E] bg-red-50/60 text-slate-900'
-                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        className={`min-h-[48px] rounded-xl border-2 font-mono text-[11px] font-extrabold transition ${
+                          formCli.forma_pago_habitual === fp
+                            ? 'border-[#C8102E] bg-red-50 text-[#C8102E]'
+                            : 'border-slate-200 bg-white text-slate-700'
                         }`}
                       >
-                        <span>
-                          {z.nombre_zona}{' '}
-                          <span className="font-mono text-slate-500">
-                            ({z.ciudad})
-                          </span>
-                        </span>
-                        {formCli.id_zona === z.id_zona && (
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-[#C8102E]" />
-                        )}
+                        {fp}
                       </button>
                     ))}
+                  </div>
                 </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Plazo (Días)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    disabled={formCli.forma_pago_habitual === 'CONTADO'}
+                    value={formCli.plazo_dias}
+                    onChange={(e) =>
+                      setFormCli({ ...formCli, plazo_dias: e.target.value })
+                    }
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3 font-mono text-sm font-bold tabular-nums text-slate-900 focus:border-[#C8102E] focus:bg-white focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                    Límite Créd. (Bs.)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formCli.limite_credito_bs}
+                    onChange={(e) =>
+                      setFormCli({
+                        ...formCli,
+                        limite_credito_bs: e.target.value,
+                      })
+                    }
+                    className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3 font-mono text-sm font-bold tabular-nums text-slate-900 focus:border-[#C8102E] focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                  Regla de Cortesía Habitual
+                </label>
+                <input
+                  type="text"
+                  value={formCli.regla_cortesia_habitual}
+                  onChange={(e) =>
+                    setFormCli({
+                      ...formCli,
+                      regla_cortesia_habitual: e.target.value,
+                    })
+                  }
+                  placeholder="Ej: 200 GRS. DE CORTESIA EN CADA PEDIDO"
+                  className="min-h-[48px] w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 text-sm font-medium text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block font-mono text-xs font-bold uppercase text-slate-700">
+                  Observaciones Comerciales
+                </label>
+                <textarea
+                  rows={2}
+                  value={formCli.observaciones}
+                  onChange={(e) =>
+                    setFormCli({ ...formCli, observaciones: e.target.value })
+                  }
+                  placeholder="Notas internas de cobranza, horarios o entrega..."
+                  className="w-full rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 shadow-inner focus:border-[#C8102E] focus:bg-white focus:ring-4 focus:ring-[#FFCD00]/30 focus:outline-none"
+                />
               </div>
 
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
